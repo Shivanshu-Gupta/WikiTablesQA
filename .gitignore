@@ -26,6 +26,8 @@ docs/.ipynb_checkpoints
 
 # Wikitables data (large files)
 data/WikiTableQuestions
+data/dpd_output/
+data/h-strict-all-matching-lfs/
 
 # Dynet jars (machine-specific)
 lib/dynet*
@@ -34,3 +36,5 @@ lib/stanford-corenlp-*models.jar
 
 # Preprocessed data
 *.preprocessed.json
+
+.DS_Store
