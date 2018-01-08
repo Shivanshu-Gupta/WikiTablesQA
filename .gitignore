@@ -26,6 +26,8 @@ docs/.ipynb_checkpoints
 
 # Wikitables data (large files)
 data/WikiTableQuestions
+
+# other large data (downloaded by download_data.sh)
 data/dpd_output/
 data/h-strict-all-matching-lfs/
 
@@ -38,3 +40,6 @@ lib/stanford-corenlp-*models.jar
 *.preprocessed.json
 
 .DS_Store
+
+# logs
+experiments/wikitables/output/
