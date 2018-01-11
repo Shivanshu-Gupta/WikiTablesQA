@@ -22,9 +22,12 @@ case class WikiTablesExample(
   tableString: String,
   targetValue: Option[Value]
 ) {
-
+  var bestPossibleLogicalForms: Option[Set[Expression2]] = None
   val logicalForms = goldLogicalForm match {
-    case None => possibleLogicalForms
+    case None => bestPossibleLogicalForms match {
+      case None => possibleLogicalForms
+      case Some(bestSubset) => bestSubset
+    }
     case Some(lf) => Set(lf)
   }
 

@@ -2,22 +2,14 @@ package org.allenai.wikitables
 
 import scala.collection.JavaConverters._
 import scala.io.Source
-
-import org.allenai.pnp.BsoTrainer
-import org.allenai.pnp.Env
-import org.allenai.pnp.LoglikelihoodTrainer
-import org.allenai.pnp.LoglikelihoodTrainer
-import org.allenai.pnp.PnpExample
-import org.allenai.pnp.PnpModel
+import org.allenai.pnp._
 import org.allenai.pnp.semparse.ActionSpace
-import org.allenai.pnp.semparse.ApplicationTemplate
 import org.allenai.pnp.semparse.ConstantTemplate
 import org.allenai.pnp.semparse.EntityLinking
 import org.allenai.pnp.semparse.SemanticParser
 import org.allenai.pnp.semparse.SemanticParserConfig
 import org.allenai.pnp.semparse.SemanticParserUtils
-import org.allenai.pnp.semparse.Template
-
+import org.allenai.pnp.semparse.ApplicationTemplate
 import com.jayantkrish.jklol.ccg.lambda.ExpressionParser
 import com.jayantkrish.jklol.ccg.lambda.Type
 import com.jayantkrish.jklol.ccg.lambda.TypeDeclaration
@@ -27,12 +19,12 @@ import com.jayantkrish.jklol.ccg.lambda2.SimplificationComparator
 import com.jayantkrish.jklol.ccg.lambda2.StaticAnalysis
 import com.jayantkrish.jklol.cli.AbstractCli
 import com.jayantkrish.jklol.util.IndexedList
-
 import edu.cmu.dynet._
 import joptsimple.OptionParser
 import joptsimple.OptionSet
 import joptsimple.OptionSpec
 import com.jayantkrish.jklol.util.IndexedList
+
 import scala.util.Random
 import scala.collection.mutable.ListBuffer
 import org.allenai.pnp.LoglikelihoodTrainer
@@ -143,7 +135,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     // Read and preprocess data
     val trainingData = loadDatasets(options.valuesOf(trainingDataOpt).asScala,
         options.valueOf(derivationsPathOpt),
-        options.valueOf(maxDerivationsOpt),
+//        options.valueOf(maxDerivationsOpt),
+        1000,
         preprocessor)
 
     println("Read " + trainingData.size + " training examples")
@@ -234,7 +227,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
 
     // Generate the action space of the semantic parser from the logical
     // forms that are well-typed.
-    val trainingLfs = trainingData.map(_.logicalForms).flatten
+    val trainingLfs = trainingData.flatMap(_.logicalForms)
     println("*** Validating types ***")
     val wellTypedTrainingLfs = trainingLfs.filter(lf =>
       SemanticParserUtils.validateTypes(lf, typeDeclaration))
@@ -284,8 +277,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
 
     train(trainingData, devData, parser, typeDeclaration, simplifier, lfPreprocessor,
         options.valueOf(epochsOpt), options.valueOf(beamSizeOpt), options.valueOf(devBeamSizeOpt),
-        options.valueOf(dropoutOpt), options.has(lasoOpt), modelOutputDir,
-        Some(options.valueOf(modelOutputOpt)))
+        options.valueOf(maxDerivationsOpt), options.valueOf(dropoutOpt), options.has(lasoOpt),
+        modelOutputDir, Some(options.valueOf(modelOutputOpt)))
   }
 
   /** Train the parser by maximizing the likelihood of examples.
@@ -294,70 +287,96 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   def train(trainingExamples: Seq[WikiTablesExample], devExamples: Seq[WikiTablesExample],
       parser: SemanticParser, typeDeclaration: TypeDeclaration,
       simplifier: ExpressionSimplifier, preprocessor: LfPreprocessor,
-      epochs: Int, beamSize: Int, devBeamSize: Int,
+      epochs: Int, beamSize: Int, devBeamSize: Int, derivationsLimit: Int,
       dropout: Double, laso: Boolean, modelDir: Option[String],
       bestModelOutput: Option[String]): Unit = {
-
     parser.dropoutProb = dropout
-    val pnpExamples = for {
-      x <- trainingExamples
-      sentence = x.sentence
-      tokenIds = sentence.getAnnotation("tokenIds").asInstanceOf[Array[Int]]
-      entityLinking = sentence.getAnnotation("entityLinking").asInstanceOf[EntityLinking]
-      unconditional = parser.generateExpression(tokenIds, entityLinking)
-      oracle <- if (laso) {
-        parser.getMultiMarginScore(x.logicalForms, entityLinking, typeDeclaration)
-      } else {
-        parser.getMultiLabelScore(x.logicalForms, entityLinking, typeDeclaration)
+    for(i <- 0 until 1) {
+      for(e <- trainingExamples) {
+        val sent = e.sentence
+        val tokenIds = sent.getAnnotation("tokenIds").asInstanceOf[Array[Int]]
+        val entityLinking = sent.getAnnotation("entityLinking").asInstanceOf[EntityLinking]
+        val scores = e.possibleLogicalForms.map(lf => {
+          val oracleOpt = parser.getLabelScore(lf, entityLinking, typeDeclaration)
+          if (oracleOpt.isDefined) {
+            val oracle = oracleOpt.get
+            ComputationGraph.renew()
+            val dist = parser.parse(tokenIds, entityLinking)
+            val context = PnpInferenceContext.init(parser.model).addExecutionScore(oracle)
+            val results = dist.beamSearch(1, 50, Env.init, context)
+            if(results.executions.nonEmpty) {
+              results.executions.head.logProb
+            } else {
+              Double.NegativeInfinity
+            }
+          } else {
+            Double.NegativeInfinity
+          }
+        })
+        val scoredLfs = (e.possibleLogicalForms zip scores).toSeq.sortBy(_._2)
+        e.bestPossibleLogicalForms = Some(scoredLfs.take(derivationsLimit).map(_._1).toSet)
       }
-    } yield {
-      PnpExample(unconditional, unconditional, Env.init, oracle)
-    }
 
-    println(pnpExamples.size + " training examples after oracle generation.")
+      val pnpExamples = for {
+        x <- trainingExamples
+        sentence = x.sentence
+        tokenIds = sentence.getAnnotation("tokenIds").asInstanceOf[Array[Int]]
+        entityLinking = sentence.getAnnotation("entityLinking").asInstanceOf[EntityLinking]
+        unconditional = parser.generateExpression(tokenIds, entityLinking)
+        oracle <- if (laso) {
+          parser.getMultiMarginScore(x.logicalForms, entityLinking, typeDeclaration)
+        } else {
+          parser.getMultiLabelScore(x.logicalForms, entityLinking, typeDeclaration)
+        }
+      } yield {
+        PnpExample(unconditional, unconditional, Env.init, oracle)
+      }
 
-    // If we have dev examples, subsample the same number of training examples
-    // for evaluating parser accuracy as training progresses.
-    // XXX: disabled because the preprocessing here can be very slow.
-    /*
-    val trainErrorExamples = if (devExamples.size > 0) {
-      Random.shuffle(trainingExamples).slice(0, Math.min(devExamples.size, trainingExamples.size))
-    } else {
-      List()
-    }
-    */
-    val trainErrorExamples: List[WikiTablesExample] = List()
+      println(pnpExamples.size + " training examples after oracle generation.")
 
-    // Call .getContext on every example that we'll use during error
-    // evaluation. This preprocesses the corresponding table using
-    // corenlp and (I think) caches the result somewhere in Sempre.
-    // This will happen during the error evaluation of training anyway,
-    // but doing it up-front makes the training timers more useful. 
-    println("Preprocessing context for train/dev evaluation examples.")
-    // TODO: how much does the choice of training examples affect the train error results??
-    // seems to affect stanford's processing time significantly.
-    trainErrorExamples.foreach(x => x.getContext)
-    devExamples.foreach(x => x.getContext)
-    
-    // Train model
-    val model = parser.model
-    val sgd = new SimpleSGDTrainer(model.model, 0.1f, 0.01f)
-    val logFunction = new SemanticParserLogFunction(modelDir, bestModelOutput,
+      // If we have dev examples, subsample the same number of training examples
+      // for evaluating parser accuracy as training progresses.
+      // XXX: disabled because the preprocessing here can be very slow.
+      /*
+      val trainErrorExamples = if (devExamples.size > 0) {
+        Random.shuffle(trainingExamples).slice(0, Math.min(devExamples.size, trainingExamples.size))
+      } else {
+        List()
+      }
+      */
+      val trainErrorExamples: List[WikiTablesExample] = List()
+
+      // Call .getContext on every example that we'll use during error
+      // evaluation. This preprocesses the corresponding table using
+      // corenlp and (I think) caches the result somewhere in Sempre.
+      // This will happen during the error evaluation of training anyway,
+      // but doing it up-front makes the training timers more useful.
+      println("Preprocessing context for train/dev evaluation examples.")
+      // TODO: how much does the choice of training examples affect the train error results??
+      // seems to affect stanford's processing time significantly.
+      trainErrorExamples.foreach(x => x.getContext)
+      devExamples.foreach(x => x.getContext)
+
+      // Train model
+      val model = parser.model
+      val sgd = new SimpleSGDTrainer(model.model, 0.1f, 0.01f)
+      val logFunction = new SemanticParserLogFunction(modelDir, bestModelOutput,
         parser, trainErrorExamples, devExamples, devBeamSize, 2,
         typeDeclaration, new SimplificationComparator(simplifier),
         preprocessor)
-    
-    if (laso) {
-      println("Running LaSO training...")
-      model.locallyNormalized = false
-      val trainer = new BsoTrainer(epochs, beamSize, 50, model, sgd, logFunction)
-      trainer.train(pnpExamples.toList)
-    } else {
-      println("Running loglikelihood training...")
-      model.locallyNormalized = true
-      val trainer = new LoglikelihoodTrainer(epochs, beamSize, true, model, sgd,
+
+      if (laso) {
+        println("Running LaSO training...")
+        model.locallyNormalized = false
+        val trainer = new BsoTrainer(epochs, beamSize, 50, model, sgd, logFunction)
+        trainer.train(pnpExamples.toList)
+      } else {
+        println("Running loglikelihood training...")
+        model.locallyNormalized = true
+        val trainer = new LoglikelihoodTrainer(epochs, beamSize, true, model, sgd,
           logFunction)
-      trainer.train(pnpExamples.toList)
+        trainer.train(pnpExamples.toList, trainingExamples.toList)
+      }
     }
     parser.dropoutProb = -1
   }
