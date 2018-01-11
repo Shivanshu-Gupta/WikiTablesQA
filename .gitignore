@@ -28,7 +28,7 @@ docs/.ipynb_checkpoints
 data/WikiTableQuestions
 
 # other large data (downloaded by download_data.sh)
-data/dpd_output
+data/dpd_output/
 data/h-strict-all-matching-lfs/
 
 # Dynet jars (machine-specific)
