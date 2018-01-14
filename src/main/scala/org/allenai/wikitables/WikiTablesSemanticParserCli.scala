@@ -292,8 +292,10 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
       bestModelOutput: Option[String]): Unit = {
     parser.dropoutProb = dropout
     for(i <- 0 until 1) {
+      println(s"TRAINING ITERATION=$i")
       for(e <- trainingExamples) {
         val sent = e.sentence
+        println(s"question: $sent")
         val tokenIds = sent.getAnnotation("tokenIds").asInstanceOf[Array[Int]]
         val entityLinking = sent.getAnnotation("entityLinking").asInstanceOf[EntityLinking]
         val scores = e.possibleLogicalForms.map(lf => {
@@ -313,7 +315,10 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
             Double.NegativeInfinity
           }
         })
-        val scoredLfs = (e.possibleLogicalForms zip scores).toSeq.sortBy(_._2)
+        val scoredLfs = (e.possibleLogicalForms zip scores).toSeq.sortBy(-_._2)
+        for((lf, score) <- scoredLfs) {
+          println(s"$score: ${lf.size()}: $lf")
+        }
         e.bestPossibleLogicalForms = Some(scoredLfs.take(derivationsLimit).map(_._1).toSet)
       }
 
