@@ -89,6 +89,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   val comparator = new SimplificationComparator(simplifier)
   val logicalFormParser = ExpressionParser.expression2()
 
+  var modelFileName: OptionSpec[String] = null // path to pretrained model
+
   override def initializeOptions(parser: OptionParser): Unit = {
     trainingDataOpt = parser.accepts("trainingData").withRequiredArg().ofType(classOf[String]).withValuesSeparatedBy(',').required()
     devDataOpt = parser.accepts("devData").withRequiredArg().ofType(classOf[String]).withValuesSeparatedBy(',')
@@ -127,6 +129,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     trainOnAnnotatedLfsOpt = parser.accepts("trainOnAnnotatedLfs")
     seq2TreeOpt = parser.accepts("seq2Tree")
     seq2SeqOpt = parser.accepts("seq2Seq")
+
+    modelFileName = parser.accepts("loadModel").withRequiredArg().ofType(classOf[String]).withValuesSeparatedBy(',') // copied from TestWikiTables modelOpt option
   }
 
   def initializeTrainingData(options: OptionSet, typeDeclaration: TypeDeclaration,
@@ -258,7 +262,13 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     config.featureMlp = options.has(entityLinkingMlpOpt)
     config.preprocessor = lfPreprocessor
     config.typeDeclaration = typeDeclaration
-    val parser = SemanticParser.create(actionSpace, vocab, wordEmbeddings, config, model)
+//    val parser = SemanticParser.create(actionSpace, vocab, wordEmbeddings, config, model)
+
+    val parser = if(options.has(modelFileName) == false){
+      SemanticParser.create(actionSpace, vocab, wordEmbeddings, config, model)
+    }else{
+      loadSerializedParser(options.valueOf(modelFileName))
+    }
 
     if (!options.has(skipActionSpaceValidationOpt)) {
       val trainSeparatedLfs = getCcgDataset(trainingData)
@@ -279,6 +289,14 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
         options.valueOf(epochsOpt), options.valueOf(beamSizeOpt), options.valueOf(devBeamSizeOpt),
         options.valueOf(maxDerivationsOpt), options.valueOf(dropoutOpt), options.has(lasoOpt),
         modelOutputDir, Some(options.valueOf(modelOutputOpt)))
+  }
+
+  def loadSerializedParser(modelFilename: String): SemanticParser = {
+    val loader = new ModelLoader(modelFilename)
+    val model = PnpModel.load(loader)
+    val parser = SemanticParser.load(loader, model)
+    loader.done()
+    parser
   }
 
   /** Train the parser by maximizing the likelihood of examples.
