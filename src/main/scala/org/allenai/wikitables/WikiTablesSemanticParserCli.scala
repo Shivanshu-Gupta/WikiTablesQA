@@ -32,6 +32,8 @@ import org.allenai.pnp.BsoTrainer
 import org.allenai.pnp.semparse.Entity
 import org.allenai.pnp.semparse.Span
 
+import scala.collection.parallel.ForkJoinTaskSupport
+
 /** Command line program for training a semantic parser
   * on the WikiTables data set.
   * runMain org.allenai.wikitables.WikiTablesSemanticParserCli -trainingData TRAIN-DATA-PATH
@@ -309,18 +311,47 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
       dropout: Double, laso: Boolean, modelDir: Option[String],
       bestModelOutput: Option[String]): Unit = {
     parser.dropoutProb = dropout
+
+    // If we have dev examples, subsample the same number of training examples
+    // for evaluating parser accuracy as training progresses.
+    // XXX: disabled because the preprocessing here can be very slow.
+    /*
+    val trainErrorExamples = if (devExamples.size > 0) {
+      Random.shuffle(trainingExamples).slice(0, Math.min(devExamples.size, trainingExamples.size))
+    } else {
+      List()
+    }
+    */
+    val trainErrorExamples: List[WikiTablesExample] = List()
+
+    // Call .getContext on every example that we'll use during error
+    // evaluation. This preprocesses the corresponding table using
+    // corenlp and (I think) caches the result somewhere in Sempre.
+    // This will happen during the error evaluation of training anyway,
+    // but doing it up-front makes the training timers more useful.
+    println("Preprocessing context for train/dev evaluation examples.")
+    // TODO: how much does the choice of training examples affect the train error results??
+    // seems to affect stanford's processing time significantly.
+    trainErrorExamples.foreach(x => x.getContext)
+    devExamples.foreach(x => x.getContext)
+
+    // Train model
+    val model = parser.model
+
     for(i <- 0 until 1) {
       for(e <- trainingExamples) {
         val sent = e.sentence
         val tokenIds = sent.getAnnotation("tokenIds").asInstanceOf[Array[Int]]
         val entityLinking = sent.getAnnotation("entityLinking").asInstanceOf[EntityLinking]
-        val scores = e.possibleLogicalForms.map(lf => {
+        val plfs = e.possibleLogicalForms.par
+        plfs.tasksupport = new ForkJoinTaskSupport(new scala.concurrent.forkjoin.ForkJoinPool(10))
+        val scores = plfs.map(lf => {
           val oracleOpt = parser.getLabelScore(lf, entityLinking, typeDeclaration)
           if (oracleOpt.isDefined) {
             val oracle = oracleOpt.get
             ComputationGraph.renew()
             val dist = parser.parse(tokenIds, entityLinking)
-            val context = PnpInferenceContext.init(parser.model).addExecutionScore(oracle)
+            val context = PnpInferenceContext.init(model).addExecutionScore(oracle)
             val results = dist.beamSearch(1, 50, Env.init, context)
             if(results.executions.nonEmpty) {
               results.executions.head.logProb
@@ -352,31 +383,6 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
 
       println(pnpExamples.size + " training examples after oracle generation.")
 
-      // If we have dev examples, subsample the same number of training examples
-      // for evaluating parser accuracy as training progresses.
-      // XXX: disabled because the preprocessing here can be very slow.
-      /*
-      val trainErrorExamples = if (devExamples.size > 0) {
-        Random.shuffle(trainingExamples).slice(0, Math.min(devExamples.size, trainingExamples.size))
-      } else {
-        List()
-      }
-      */
-      val trainErrorExamples: List[WikiTablesExample] = List()
-
-      // Call .getContext on every example that we'll use during error
-      // evaluation. This preprocesses the corresponding table using
-      // corenlp and (I think) caches the result somewhere in Sempre.
-      // This will happen during the error evaluation of training anyway,
-      // but doing it up-front makes the training timers more useful.
-      println("Preprocessing context for train/dev evaluation examples.")
-      // TODO: how much does the choice of training examples affect the train error results??
-      // seems to affect stanford's processing time significantly.
-      trainErrorExamples.foreach(x => x.getContext)
-      devExamples.foreach(x => x.getContext)
-
-      // Train model
-      val model = parser.model
       val sgd = new SimpleSGDTrainer(model.model, 0.1f, 0.01f)
       val logFunction = new SemanticParserLogFunction(modelDir, bestModelOutput,
         parser, trainErrorExamples, devExamples, devBeamSize, 2,
