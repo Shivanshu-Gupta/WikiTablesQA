@@ -2,6 +2,10 @@ package org.allenai.wikitables
 
 import scala.collection.JavaConverters._
 import scala.io.Source
+import java.nio.file.{Files, Paths}
+import java.io._
+import java.util.zip.GZIPOutputStream
+
 import org.allenai.pnp._
 import org.allenai.pnp.semparse.ActionSpace
 import org.allenai.pnp.semparse.ConstantTemplate
@@ -92,6 +96,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   val logicalFormParser = ExpressionParser.expression2()
 
   var modelFileName: OptionSpec[String] = null // path to pretrained model
+  var iterationNum: OptionSpec[Integer] = null
+  var lfsOutputOpt: OptionSpec[String] = null
 
   override def initializeOptions(parser: OptionParser): Unit = {
     trainingDataOpt = parser.accepts("trainingData").withRequiredArg().ofType(classOf[String]).withValuesSeparatedBy(',').required()
@@ -133,6 +139,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     seq2SeqOpt = parser.accepts("seq2Seq")
 
     modelFileName = parser.accepts("loadModel").withRequiredArg().ofType(classOf[String]).withValuesSeparatedBy(',') // copied from TestWikiTables modelOpt option
+    iterationNum = parser.accepts("iterationNum").withRequiredArg().ofType(classOf[Integer]).defaultsTo(0)
+    lfsOutputOpt = parser.accepts("lfsOutput").withRequiredArg().ofType(classOf[String]).withValuesSeparatedBy(',').required()
   }
 
   def initializeTrainingData(options: OptionSet, typeDeclaration: TypeDeclaration,
@@ -286,8 +294,9 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     } else {
       None
     }
-
+    val lfsOutputPath = options.valueOf(lfsOutputOpt) + '/' + options.valueOf(iterationNum)
     train(trainingData, devData, parser, typeDeclaration, simplifier, lfPreprocessor,
+        options.valueOf(iterationNum), lfsOutputPath,
         options.valueOf(epochsOpt), options.valueOf(beamSizeOpt), options.valueOf(devBeamSizeOpt),
         options.valueOf(maxDerivationsOpt), options.valueOf(dropoutOpt), options.has(lasoOpt),
         modelOutputDir, Some(options.valueOf(modelOutputOpt)))
@@ -307,6 +316,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   def train(trainingExamples: Seq[WikiTablesExample], devExamples: Seq[WikiTablesExample],
       parser: SemanticParser, typeDeclaration: TypeDeclaration,
       simplifier: ExpressionSimplifier, preprocessor: LfPreprocessor,
+      iter: Integer, lfsOutputPath: String,
       epochs: Int, beamSize: Int, devBeamSize: Int, derivationsLimit: Int,
       dropout: Double, laso: Boolean, modelDir: Option[String],
       bestModelOutput: Option[String]): Unit = {
@@ -338,16 +348,28 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     // Train model
     val model = parser.model
 
-    for(i <- 0 until 1) {
-      println(s"TRAINING ITERATION=$i")
-      for(e <- trainingExamples) {
-        val sent = e.sentence
-        println(s"question: $sent")
-        val tokenIds = sent.getAnnotation("tokenIds").asInstanceOf[Array[Int]]
-        val entityLinking = sent.getAnnotation("entityLinking").asInstanceOf[EntityLinking]
-        val plfs = e.possibleLogicalForms.par
-        plfs.tasksupport = new ForkJoinTaskSupport(new scala.concurrent.forkjoin.ForkJoinPool(10))
-        val scores = plfs.map(lf => {
+    println(s"TRAINING ITERATION = $iter")
+    var proceed = true
+    for(e <- trainingExamples) {
+      val sent = e.sentence
+      //      println(s"${e.id}: $sent")
+      val tokenIds = sent.getAnnotation("tokenIds").asInstanceOf[Array[Int]]
+      val entityLinking = sent.getAnnotation("entityLinking").asInstanceOf[EntityLinking]
+
+      // val plfs = e.possibleLogicalForms.par
+      // plfs.tasksupport = new ForkJoinTaskSupport(new scala.concurrent.forkjoin.ForkJoinPool(10))
+
+      // TODO: check if the scores have been persisted to file and restore if possible.
+      val outputDir = new File(lfsOutputPath)
+      if (!outputDir.exists()) {
+        outputDir.mkdirs()
+      }
+
+      val bestLfsPath = lfsOutputPath + '/' + e.id + ".gz"
+      val scoredLfsPath = lfsOutputPath + '/' + e.id + ".all"
+      if (!Files.exists(Paths.get(bestLfsPath))) {
+        proceed = false
+        val scores = e.possibleLogicalForms.map(lf => {
           val oracleOpt = parser.getLabelScore(lf, entityLinking, typeDeclaration)
           if (oracleOpt.isDefined) {
             val oracle = oracleOpt.get
@@ -355,7 +377,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
             val dist = parser.parse(tokenIds, entityLinking)
             val context = PnpInferenceContext.init(model).addExecutionScore(oracle)
             val results = dist.beamSearch(1, 50, Env.init, context)
-            if(results.executions.nonEmpty) {
+            if (results.executions.nonEmpty) {
               results.executions.head.logProb
             } else {
               Double.NegativeInfinity
@@ -364,48 +386,62 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
             Double.NegativeInfinity
           }
         })
-        val scoredLfs = (e.possibleLogicalForms zip scores).toSeq.sortBy(-_._2)
-        for((lf, score) <- scoredLfs) {
-          println(s"$score: ${lf.size()}: $lf")
+
+        val scoredLfs = (e.possibleLogicalForms.map(lf => (WikiTablesUtil.toSempreLogicalForm(lf).get, lf.size)) zip scores).toSeq.sortBy(-_._2)
+//        for (((lf, size), score) <- scoredLfs) {
+//          println(s"$score: $size: $lf")
+//        }
+        e.bestPossibleLogicalForms = Some(scoredLfs.take(derivationsLimit).map(_._1._1).toSet)
+        // TODO: store either the lf-score map or the best lfs and exit.
+        val writer = new PrintWriter(new GZIPOutputStream(new FileOutputStream(bestLfsPath)))
+        for (lf <- e.bestPossibleLogicalForms.get) {
+          writer.println(lf)
         }
-        e.bestPossibleLogicalForms = Some(scoredLfs.take(derivationsLimit).map(_._1).toSet)
-      }
-
-      val pnpExamples = for {
-        x <- trainingExamples
-        sentence = x.sentence
-        tokenIds = sentence.getAnnotation("tokenIds").asInstanceOf[Array[Int]]
-        entityLinking = sentence.getAnnotation("entityLinking").asInstanceOf[EntityLinking]
-        unconditional = parser.generateExpression(tokenIds, entityLinking)
-        oracle <- if (laso) {
-          parser.getMultiMarginScore(x.logicalForms, entityLinking, typeDeclaration)
-        } else {
-          parser.getMultiLabelScore(x.logicalForms, entityLinking, typeDeclaration)
+        writer.close()
+        val writer2 = new PrintWriter(new FileOutputStream(scoredLfsPath))
+        for (((lf, size), score) <- scoredLfs) {
+          writer2.println(s"$score\t$size\t$lf")
         }
-      } yield {
-        PnpExample(unconditional, unconditional, Env.init, oracle)
+        writer2.close()
       }
+    }
 
-      println(pnpExamples.size + " training examples after oracle generation.")
+    if(!proceed) return
 
-      val sgd = new SimpleSGDTrainer(model.model, 0.1f, 0.01f)
-      val logFunction = new SemanticParserLogFunction(modelDir, bestModelOutput,
-        parser, trainErrorExamples, devExamples, devBeamSize, 2,
-        typeDeclaration, new SimplificationComparator(simplifier),
-        preprocessor)
-
-      if (laso) {
-        println("Running LaSO training...")
-        model.locallyNormalized = false
-        val trainer = new BsoTrainer(epochs, beamSize, 50, model, sgd, logFunction)
-        trainer.train(pnpExamples.toList)
+    val pnpExamples = for {
+      x <- trainingExamples
+      sentence = x.sentence
+      tokenIds = sentence.getAnnotation("tokenIds").asInstanceOf[Array[Int]]
+      entityLinking = sentence.getAnnotation("entityLinking").asInstanceOf[EntityLinking]
+      unconditional = parser.generateExpression(tokenIds, entityLinking)
+      oracle <- if (laso) {
+        parser.getMultiMarginScore(x.logicalForms, entityLinking, typeDeclaration)
       } else {
-        println("Running loglikelihood training...")
-        model.locallyNormalized = true
-        val trainer = new LoglikelihoodTrainer(epochs, beamSize, true, model, sgd,
-          logFunction)
-        trainer.train(pnpExamples.toList, trainingExamples.toList)
+        parser.getMultiLabelScore(x.logicalForms, entityLinking, typeDeclaration)
       }
+    } yield {
+      PnpExample(unconditional, unconditional, Env.init, oracle)
+    }
+
+    println(pnpExamples.size + " training examples after oracle generation.")
+
+    val sgd = new SimpleSGDTrainer(model.model, 0.1f, 0.01f)
+    val logFunction = new SemanticParserLogFunction(modelDir, bestModelOutput,
+      parser, trainErrorExamples, devExamples, devBeamSize, 2,
+      typeDeclaration, new SimplificationComparator(simplifier),
+      preprocessor)
+
+    if (laso) {
+      println("Running LaSO training...")
+      model.locallyNormalized = false
+      val trainer = new BsoTrainer(epochs, beamSize, 50, model, sgd, logFunction)
+      trainer.train(pnpExamples.toList)
+    } else {
+      println("Running loglikelihood training...")
+      model.locallyNormalized = true
+      val trainer = new LoglikelihoodTrainer(epochs, beamSize, true, model, sgd,
+        logFunction)
+      trainer.train(pnpExamples.toList, trainingExamples.toList)
     }
     parser.dropoutProb = -1
   }

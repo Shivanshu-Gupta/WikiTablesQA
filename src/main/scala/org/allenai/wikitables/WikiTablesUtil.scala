@@ -40,7 +40,8 @@ object WikiTablesUtil {
   val LEMMA_ANNOTATION = "lemma"
 
   // Maximum number of derivations stored
-  val MAX_DERIVATIONS = 200
+  // val MAX_DERIVATIONS = 200
+  val MAX_DERIVATIONS = 1000
 
   CustomExample.opts.allowNoAnnotation = true
   TableKnowledgeGraph.opts.baseCSVDir = "data/WikiTableQuestions"

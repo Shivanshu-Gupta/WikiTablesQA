@@ -1,0 +1,9 @@
+1. Delete JSON files whenever the logical forms are changed - in order to load
+the latest ones
+
+2. Load the modules in
+/home/cse/dual/cs5130298/Academics/MachineComprehension/modules.sh
+
+3. For compilation, also export JAVA_OPTS="-Xmx4g"
+
+4. In run_experiment.sh, check environmental variables

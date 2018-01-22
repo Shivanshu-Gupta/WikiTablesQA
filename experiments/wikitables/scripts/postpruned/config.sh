@@ -8,25 +8,26 @@ FOLD=1
 # This is a subsample of 100 examples
 # TRAIN="data/WikiTableQuestions/data/subsamples/random-split-$FOLD-train-100.examples"
 # Uncomment below to use the full training set.
-TRAIN="data/WikiTableQuestions/data/random-split-$FOLD-train.examples"
+TRAIN="data/WikiTableQuestions/data/random-split-$FOLD-train.examples.pruned"
+# TRAIN="data/WikiTableQuestions/data/random-1000.examples"
 
 # Development data used for evaluating model accuracy as training progresses.
 # Using a subsample here can reduce training time.
 # TRAIN_DEV="data/WikiTableQuestions/data/subsamples/random-split-$FOLD-dev-100.examples"
 # Uncomment below to use the full dev set.
-TRAIN_DEV="data/WikiTableQuestions/data/random-split-$FOLD-dev.examples"
+TRAIN_DEV="data/WikiTableQuestions/data/random-split-$FOLD-dev.examples.pruned"
 
 # Development data for evaluating the final trained model.
 # DEV="data/WikiTableQuestions/data/subsamples/random-split-$FOLD-dev-100.examples"
 # Uncomment below to use the full dev set.
 # DEV="data/WikiTableQuestions/data/random-split-$FOLD-dev.examples"
 # Uncomment below to use the test set.
-DEV="data/WikiTableQuestions/data/pristine-unseen-tables.examples"
+DEV="data/WikiTableQuestions/data/pristine-unseen-tables.examples.pruned"
 
 # Location of DPD output
-# DERIVATIONS_PATH="data/dpd_output/"
-DERIVATIONS_PATH="/home/cse/phd/csz178058/scratch/dpd/dpd_outputs_presplit"
-# DERIVATIONS_PATH="/home/cse/dual/cs5130298/scratch/dpd/experiments/03/fold1/model_unpruned_itr1/lfs_output/1"
+DERIVATIONS_PATH="data/dpd_output/"
+# DERIVATIONS_PATH="/home/cse/phd/csz178058/scratch/dpd/dpd_outputs_presplit"
+# DERIVATIONS_PATH="/home/cse/dual/cs5130298/scratch/dpd/experiments/03/fold1/model_pruned_itr1/lfs_output/1"
 
 EXPERIMENT_NAME="fold$FOLD"
 EXPERIMENT_ID="03"

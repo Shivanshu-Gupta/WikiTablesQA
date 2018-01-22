@@ -43,3 +43,5 @@ lib/stanford-corenlp-*models.jar
 
 # logs
 experiments/wikitables/output/
+models/
+parallel_logs/
