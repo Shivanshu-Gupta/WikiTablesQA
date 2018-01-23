@@ -3,11 +3,11 @@
 # change to the correct directory
 cd ~/Academics/MachineComprehension/WikiTablesQA
 
-source "experiments/wikitables/scripts/config_pruned.sh"
+source "experiments/wikitables/scripts/postpruned/config.sh"
 ## Overwrite TRAIN variable, taking file name from command line argument
 TRAIN=$FILE_NAME
 
-MY_NAME="model_pruned"
+MY_NAME="model_postpruned"
 MY_DIR=$EXPERIMENT_DIR/$MY_NAME/
 MY_MODEL=$MY_DIR/parser_final.ser
 MODEL_DIR=$MY_DIR/models/

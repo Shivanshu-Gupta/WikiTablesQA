@@ -1,12 +1,12 @@
 #!/bin/bash -e
 
-source "experiments/wikitables/scripts/config_prepruned.sh"
+source "experiments/wikitables/scripts/prepruned/config.sh"
 
 MY_NAME="model_prepruned"
 MY_DIR=$EXPERIMENT_DIR/$MY_NAME/
 MY_MODEL=$MY_DIR/parser_final.ser
 MODEL_DIR=$MY_DIR/models/
-LFS_OUTPUT=$MY_DIR/org_lfs/
+LFS_OUTPUT=$MY_DIR/lfs_output/
 ITERATION_NUM=1
 
 mkdir -p $MY_DIR
