@@ -387,20 +387,20 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
           }
         })
 
-        val scoredLfs = (e.possibleLogicalForms.map(lf => (WikiTablesUtil.toSempreLogicalForm(lf).get, lf.size)) zip scores).toSeq.sortBy(-_._2)
+        val scoredLfs = (e.possibleLogicalForms.map(lf => (lf, lf.size)) zip scores).toSeq.sortBy(-_._2)
 //        for (((lf, size), score) <- scoredLfs) {
-//          println(s"$score: $size: $lf")
+//          println(s"$score: $size: ${WikiTablesUtil.toSempreLogicalForm(lf).get}")
 //        }
         e.bestPossibleLogicalForms = Some(scoredLfs.take(derivationsLimit).map(_._1._1).toSet)
         // TODO: store either the lf-score map or the best lfs and exit.
         val writer = new PrintWriter(new GZIPOutputStream(new FileOutputStream(bestLfsPath)))
         for (lf <- e.bestPossibleLogicalForms.get) {
-          writer.println(lf)
+          writer.println(WikiTablesUtil.toSempreLogicalForm(lf).get)
         }
         writer.close()
         val writer2 = new PrintWriter(new FileOutputStream(scoredLfsPath))
         for (((lf, size), score) <- scoredLfs) {
-          writer2.println(s"$score\t$size\t$lf")
+          writer2.println(s"$score\t$size\t${WikiTablesUtil.toSempreLogicalForm(lf).get}")
         }
         writer2.close()
       }

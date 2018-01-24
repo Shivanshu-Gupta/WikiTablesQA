@@ -45,3 +45,4 @@ lib/stanford-corenlp-*models.jar
 experiments/wikitables/output/
 models/
 parallel_logs/
+parallel_logs_prepruned/

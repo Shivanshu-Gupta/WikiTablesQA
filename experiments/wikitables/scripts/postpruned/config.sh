@@ -25,9 +25,9 @@ TRAIN_DEV="data/WikiTableQuestions/data/random-split-$FOLD-dev.examples.pruned"
 DEV="data/WikiTableQuestions/data/pristine-unseen-tables.examples.pruned"
 
 # Location of DPD output
-DERIVATIONS_PATH="data/dpd_output/"
+# DERIVATIONS_PATH="data/dpd_output/"
 # DERIVATIONS_PATH="/home/cse/phd/csz178058/scratch/dpd/dpd_outputs_presplit"
-# DERIVATIONS_PATH="/home/cse/dual/cs5130298/scratch/dpd/experiments/03/fold1/model_pruned_itr1/lfs_output/1"
+DERIVATIONS_PATH="/home/cse/dual/cs5130298/scratch/dpd/experiments/03/fold1/model_postpruned/lfs_output/1"
 
 EXPERIMENT_NAME="fold$FOLD"
 EXPERIMENT_ID="03"

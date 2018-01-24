@@ -4,10 +4,10 @@ source "experiments/wikitables/scripts/prepruned/config.sh"
 
 MY_NAME="model_prepruned"
 MY_DIR=$EXPERIMENT_DIR/$MY_NAME/
-MY_MODEL=$MY_DIR/parser_final.ser
 MODEL_DIR=$MY_DIR/models/
 LFS_OUTPUT=$MY_DIR/lfs_output/
 ITERATION_NUM=1
+MY_MODEL=$MY_DIR/parser_final_$ITERATION_NUM.ser
 
 mkdir -p $MY_DIR
 mkdir -p $MODEL_DIR
