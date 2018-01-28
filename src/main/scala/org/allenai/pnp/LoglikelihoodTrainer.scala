@@ -10,11 +10,11 @@ import org.allenai.wikitables.WikiTablesExample
 import scala.util.Random
 
 class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleExecutions: Boolean,
-    val model: PnpModel, val trainer: Trainer, val log: LogFunction, val maxOnlyObj: Boolean) {
+    val model: PnpModel, val trainer: Trainer, val log: LogFunction, val maxOnlyObj: Boolean = false) {
 
   Preconditions.checkArgument(model.locallyNormalized == true)
 
-  def train[A](wikiexamples: Seq[WikiTablesExample], examples: Seq[PnpExample[A]]): Unit = {
+  def train[A](examples: Seq[PnpExample[A]], wikiexamples: Seq[WikiTablesExample] = null): Unit = {
     for (i <- 0 until epochs) {
       var loss = 0.0
       var searchErrors = 0
