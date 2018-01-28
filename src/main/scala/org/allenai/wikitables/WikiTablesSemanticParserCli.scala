@@ -358,10 +358,6 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
       val trainer = new LoglikelihoodTrainerNoPnp(epochs, true, parser, sgd,
           logFunction, typeDeclaration, k, margin)
       trainer.train(trainingExamples)
-      model.locallyNormalized = true
-      val trainer = new LoglikelihoodTrainer(epochs, beamSize, true, model, sgd,
-          logFunction, maxOnlyObj)
-      trainer.train(trainingExamples, pnpExamples.toList)
     }
     parser.dropoutProb = -1
   }
