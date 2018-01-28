@@ -6,7 +6,8 @@ cd ~/Academics/MachineComprehension/WikiTablesQA
 source "experiments/wikitables/scripts/prepruned/config.sh"
 ## Overwrite TRAIN variable, taking file name from command line argument
 TRAIN="$FILE_NAME"
-echo $FILE_NAME
+## Overwrite DERIVATIONS_PATH
+DERIVATIONS_PATH="/home/cse/phd/csz178058/scratch/dpd/dpd_outputs_presplit"
 
 MY_NAME="model_prepruned"
 MY_DIR=$EXPERIMENT_DIR/$MY_NAME/

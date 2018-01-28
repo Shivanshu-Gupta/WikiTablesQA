@@ -46,3 +46,6 @@ experiments/wikitables/output/
 models/
 parallel_logs/
 parallel_logs_prepruned/
+parallel_logs_postpruned/
+*.sh.o*
+*.sh.e*

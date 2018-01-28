@@ -6,6 +6,8 @@ cd ~/Academics/MachineComprehension/WikiTablesQA
 source "experiments/wikitables/scripts/postpruned/config.sh"
 ## Overwrite TRAIN variable, taking file name from command line argument
 TRAIN=$FILE_NAME
+## Overwrite DERIVATIONS_PATH variable
+DERIVATIONS_PATH="data/dpd_output/"
 
 MY_NAME="model_postpruned"
 MY_DIR=$EXPERIMENT_DIR/$MY_NAME/

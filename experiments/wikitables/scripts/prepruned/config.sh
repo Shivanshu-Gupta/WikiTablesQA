@@ -25,8 +25,8 @@ DEV="data/WikiTableQuestions/data/pristine-unseen-tables.examples"
 
 # Location of DPD output
 # DERIVATIONS_PATH="data/dpd_output/"
-DERIVATIONS_PATH="/home/cse/phd/csz178058/scratch/dpd/dpd_outputs_presplit"
-# DERIVATIONS_PATH="/home/cse/dual/cs5130298/scratch/dpd/experiments/03/fold1/model_unpruned_itr1/lfs_output/1"
+# DERIVATIONS_PATH="/home/cse/phd/csz178058/scratch/dpd/dpd_outputs_presplit"
+DERIVATIONS_PATH="/home/cse/dual/cs5130298/scratch/dpd/experiments/03/fold1/model_prepruned/lfs_output/2"
 
 EXPERIMENT_NAME="fold$FOLD"
 EXPERIMENT_ID="03"

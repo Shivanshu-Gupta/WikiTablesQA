@@ -296,7 +296,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     }
     val lfsOutputPath = options.valueOf(lfsOutputOpt) + '/' + options.valueOf(iterationNum)
     train(trainingData, devData, parser, typeDeclaration, simplifier, lfPreprocessor,
-        options.valueOf(iterationNum), lfsOutputPath,
+        options.valueOf(iterationNum), lfsOutputPath, options,
         options.valueOf(epochsOpt), options.valueOf(beamSizeOpt), options.valueOf(devBeamSizeOpt),
         options.valueOf(maxDerivationsOpt), options.valueOf(dropoutOpt), options.has(lasoOpt),
         modelOutputDir, Some(options.valueOf(modelOutputOpt)))
@@ -316,7 +316,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   def train(trainingExamples: Seq[WikiTablesExample], devExamples: Seq[WikiTablesExample],
       parser: SemanticParser, typeDeclaration: TypeDeclaration,
       simplifier: ExpressionSimplifier, preprocessor: LfPreprocessor,
-      iter: Integer, lfsOutputPath: String,
+      iter: Integer, lfsOutputPath: String, options: OptionSet,
       epochs: Int, beamSize: Int, devBeamSize: Int, derivationsLimit: Int,
       dropout: Double, laso: Boolean, modelDir: Option[String],
       bestModelOutput: Option[String]): Unit = {
@@ -349,64 +349,65 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     val model = parser.model
 
     println(s"TRAINING ITERATION = $iter")
-    var proceed = true
-    for(e <- trainingExamples) {
-      val sent = e.sentence
-      //      println(s"${e.id}: $sent")
-      val tokenIds = sent.getAnnotation("tokenIds").asInstanceOf[Array[Int]]
-      val entityLinking = sent.getAnnotation("entityLinking").asInstanceOf[EntityLinking]
 
-      // val plfs = e.possibleLogicalForms.par
-      // plfs.tasksupport = new ForkJoinTaskSupport(new scala.concurrent.forkjoin.ForkJoinPool(10))
+    if(options.has(modelFileName) == true){
+      for(e <- trainingExamples) {
+        val sent = e.sentence
+        //      println(s"${e.id}: $sent")
+        val tokenIds = sent.getAnnotation("tokenIds").asInstanceOf[Array[Int]]
+        val entityLinking = sent.getAnnotation("entityLinking").asInstanceOf[EntityLinking]
+  
+        // val plfs = e.possibleLogicalForms.par
+        // plfs.tasksupport = new ForkJoinTaskSupport(new scala.concurrent.forkjoin.ForkJoinPool(10))
 
-      // TODO: check if the scores have been persisted to file and restore if possible.
-      val outputDir = new File(lfsOutputPath)
-      if (!outputDir.exists()) {
-        outputDir.mkdirs()
-      }
+        // TODO: check if the scores have been persisted to file and restore if possible.
+        val outputDir = new File(lfsOutputPath)
+        if (!outputDir.exists()) {
+          outputDir.mkdirs()
+        }
 
-      val bestLfsPath = lfsOutputPath + '/' + e.id + ".gz"
-      val scoredLfsPath = lfsOutputPath + '/' + e.id + ".all"
-      if (!Files.exists(Paths.get(bestLfsPath))) {
-        proceed = false
-        val scores = e.possibleLogicalForms.map(lf => {
-          val oracleOpt = parser.getLabelScore(lf, entityLinking, typeDeclaration)
-          if (oracleOpt.isDefined) {
-            val oracle = oracleOpt.get
-            ComputationGraph.renew()
-            val dist = parser.parse(tokenIds, entityLinking)
-            val context = PnpInferenceContext.init(model).addExecutionScore(oracle)
-            val results = dist.beamSearch(1, 50, Env.init, context)
-            if (results.executions.nonEmpty) {
-              results.executions.head.logProb
+        val bestLfsPath = lfsOutputPath + '/' + e.id + ".gz"
+        val scoredLfsPath = lfsOutputPath + '/' + e.id + ".all"
+        if (!Files.exists(Paths.get(bestLfsPath))) {
+          val scores = e.possibleLogicalForms.map(lf => {
+            val oracleOpt = parser.getLabelScore(lf, entityLinking, typeDeclaration)
+            if (oracleOpt.isDefined) {
+              val oracle = oracleOpt.get
+              ComputationGraph.renew()
+              val dist = parser.parse(tokenIds, entityLinking)
+              val context = PnpInferenceContext.init(model).addExecutionScore(oracle)
+              val results = dist.beamSearch(1, 50, Env.init, context)
+              if (results.executions.nonEmpty) {
+                results.executions.head.logProb
+              } else {
+                Double.NegativeInfinity
+              }
             } else {
               Double.NegativeInfinity
             }
-          } else {
-            Double.NegativeInfinity
-          }
-        })
+          })
 
-        val scoredLfs = (e.possibleLogicalForms.map(lf => (lf, lf.size)) zip scores).toSeq.sortBy(-_._2)
-//        for (((lf, size), score) <- scoredLfs) {
-//          println(s"$score: $size: ${WikiTablesUtil.toSempreLogicalForm(lf).get}")
-//        }
-        e.bestPossibleLogicalForms = Some(scoredLfs.take(derivationsLimit).map(_._1._1).toSet)
-        // TODO: store either the lf-score map or the best lfs and exit.
-        val writer = new PrintWriter(new GZIPOutputStream(new FileOutputStream(bestLfsPath)))
-        for (lf <- e.bestPossibleLogicalForms.get) {
-          writer.println(WikiTablesUtil.toSempreLogicalForm(lf).get)
+          val scoredLfs = (e.possibleLogicalForms.map(lf => (lf, lf.size)) zip scores).toSeq.sortBy(-_._2)
+  //        for (((lf, size), score) <- scoredLfs) {
+  //          println(s"$score: $size: ${WikiTablesUtil.toSempreLogicalForm(lf).get}")
+  //        }
+          e.bestPossibleLogicalForms = Some(scoredLfs.take(derivationsLimit).map(_._1._1).toSet)
+          // TODO: store either the lf-score map or the best lfs and exit.
+          val writer = new PrintWriter(new GZIPOutputStream(new FileOutputStream(bestLfsPath)))
+          for (lf <- e.bestPossibleLogicalForms.get) {
+            writer.println(WikiTablesUtil.toSempreLogicalForm(lf).get)
+          }
+          writer.close()
+          val writer2 = new PrintWriter(new FileOutputStream(scoredLfsPath))
+          for (((lf, size), score) <- scoredLfs) {
+            writer2.println(s"$score\t$size\t${WikiTablesUtil.toSempreLogicalForm(lf).get}")
+          }
+          writer2.close()
         }
-        writer.close()
-        val writer2 = new PrintWriter(new FileOutputStream(scoredLfsPath))
-        for (((lf, size), score) <- scoredLfs) {
-          writer2.println(s"$score\t$size\t${WikiTablesUtil.toSempreLogicalForm(lf).get}")
-        }
-        writer2.close()
       }
+      return
     }
 
-    if(!proceed) return
 
     val pnpExamples = for {
       x <- trainingExamples
