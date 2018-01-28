@@ -91,6 +91,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   var trainOnAnnotatedLfsOpt: OptionSpec[Void] = null
   var seq2TreeOpt: OptionSpec[Void] = null
   var seq2SeqOpt: OptionSpec[Void] = null
+  var maxOnlyObjOpt: OptionSpec[Void] = null
 
   // Initialize expression processing for Wikitables logical forms.
   val simplifier = ExpressionSimplifier.lambdaCalculus()
@@ -135,6 +136,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     trainOnAnnotatedLfsOpt = parser.accepts("trainOnAnnotatedLfs")
     seq2TreeOpt = parser.accepts("seq2Tree")
     seq2SeqOpt = parser.accepts("seq2Seq")
+    maxOnlyObjOpt = parser.accepts("maxOnlyObj")
   }
 
   def initializeTrainingData(options: OptionSet, typeDeclaration: TypeDeclaration,
@@ -285,7 +287,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     train(trainingData, devData, parser, typeDeclaration, simplifier, lfPreprocessor,
         options.valueOf(epochsOpt), options.valueOf(beamSizeOpt), options.valueOf(devBeamSizeOpt),
         options.valueOf(dropoutOpt), options.has(lasoOpt), modelOutputDir,
-        Some(options.valueOf(modelOutputOpt)))
+        Some(options.valueOf(modelOutputOpt)), options.has(maxOnlyObjOpt))
   }
 
   /** Train the parser by maximizing the likelihood of examples.
@@ -296,7 +298,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
       simplifier: ExpressionSimplifier, preprocessor: LfPreprocessor,
       epochs: Int, beamSize: Int, devBeamSize: Int,
       dropout: Double, laso: Boolean, modelDir: Option[String],
-      bestModelOutput: Option[String]): Unit = {
+      bestModelOutput: Option[String], maxOnlyObj: Boolean): Unit = {
 
     parser.dropoutProb = dropout
     val pnpExamples = for {
@@ -356,8 +358,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
       println("Running loglikelihood training...")
       model.locallyNormalized = true
       val trainer = new LoglikelihoodTrainer(epochs, beamSize, true, model, sgd,
-          logFunction)
-      trainer.train(pnpExamples.toList)
+          logFunction, maxOnlyObj)
+      trainer.train(trainingExamples, pnpExamples.toList)
     }
     parser.dropoutProb = -1
   }
