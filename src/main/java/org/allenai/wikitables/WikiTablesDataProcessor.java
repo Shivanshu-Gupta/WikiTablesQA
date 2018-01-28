@@ -3,6 +3,7 @@ package org.allenai.wikitables;
 import java.io.*;
 import java.util.*;
 import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 
 import com.google.common.collect.Lists;
 import com.jayantkrish.jklol.ccg.lambda.ExpressionParser;
@@ -116,8 +117,52 @@ public class WikiTablesDataProcessor {
     return ex;
   }
 
+  static void writeBagsPos(String derivationsPath, CustomExample ex, List<Pair<Integer, Formula>> formulasWithSizes) throws IOException{
+  	int cnt = 0;
+  	String exId = ex.getId();
+  	BufferedWriter writer = null;
+  	for (Pair<Integer, Formula> p : formulasWithSizes.subList(0, Math.min(formulasWithSizes.size(), 100))){
+  		if (cnt % 10 == 0){
+  			if(writer != null){
+  				writer.close();
+  			}
+  			writer =  new BufferedWriter(new OutputStreamWriter(new GZIPOutputStream(new FileOutputStream(derivationsPath + "/" + exId + "_p"+(cnt/10)+".gz"))));
+  		}
+	    writer.append(p.getSecond().toString()+"\n");
+	    cnt += 1;
+  	}
+  	
+  	if(writer != null){
+  		writer.close();
+  	}
+
+  }
+
+  static void writeBagsNeg(String derivationsPath, CustomExample ex, List<Pair<Integer, Formula>> formulasWithSizes) throws IOException{
+  	int cnt = 0;
+  	String exId = ex.getId();
+  	BufferedWriter writer = null;
+
+  	for (Pair<Integer, Formula> p : formulasWithSizes.subList(Math.max(formulasWithSizes.size()-100,0), formulasWithSizes.size())){
+  		if (cnt % 10 == 0){
+  			if(writer != null){
+  				writer.close();
+  			}
+  			writer =  new BufferedWriter(new OutputStreamWriter(new GZIPOutputStream(new FileOutputStream(derivationsPath + "/" + exId + "_n"+(cnt/10)+".gz"))));
+  		}
+	    writer.append(p.getSecond().toString()+"\n");
+	    cnt += 1;
+  	}
+
+  	if(writer != null){
+  		writer.close();
+  	}
+  		
+  }
+
   static void addDerivations(List<CustomExample> dataset, String derivationsPath,
       int numDerivationsLimit) {
+  	boolean toWriteBags = true;
     if (numDerivationsLimit != -1) {
       System.out.println("Limiting number of derivations per example to " + numDerivationsLimit);
     }
@@ -125,22 +170,24 @@ public class WikiTablesDataProcessor {
     for (CustomExample ex: dataset) {
       String exId = ex.getId();
       File file = new File(derivationsPath + "/" + exId + ".gz");
+      // File file_with_sizes = new File(derivationsPath + "/" + exId + ".tsv");
 
       List<Formula> correctFormulas = Lists.newArrayList();
+
       if (file.exists()) {
-        try {
+    	try {
           BufferedReader reader = new BufferedReader(new InputStreamReader(
               new GZIPInputStream(new FileInputStream(file))));
           String line;
           while ((line = reader.readLine()) != null) {
             correctFormulas.add(Formula.fromString(line));
           }
-        } catch (IOException e) {
-          e.printStackTrace();
-        }
-      }
-      
-      if (numDerivationsLimit >= 0 && correctFormulas.size() > numDerivationsLimit) {        
+	    } catch (IOException e) {
+	      e.printStackTrace();
+	    }
+      }      
+
+      if (toWriteBags || (numDerivationsLimit >= 0 && correctFormulas.size() > numDerivationsLimit)) {        
         List<Pair<Integer, Formula>> formulasWithSizes = Lists.newArrayList();
         for (Formula f : correctFormulas) {
           Expression2 e = ExpressionParser.expression2().parse(f.toString());
@@ -148,13 +195,23 @@ public class WikiTablesDataProcessor {
         }
 
         formulasWithSizes.sort(new DerivationLengthComparator());
-        correctFormulas.clear();
-        for (Pair<Integer, Formula> p : formulasWithSizes.subList(0, numDerivationsLimit)) {
-          correctFormulas.add(p.getSecond());
+        if(toWriteBags) {
+        	try{
+        		writeBagsPos(derivationsPath, ex,formulasWithSizes);
+        	} catch (IOException e){
+        		e.printStackTrace();
+        	}
+        } else {
+        	correctFormulas.clear();
+	        for (Pair<Integer, Formula> p : formulasWithSizes.subList(0, numDerivationsLimit)) {
+	          correctFormulas.add(p.getSecond());
+	        }	
         }
       }
-
       ex.alternativeFormulas = correctFormulas;
+    }
+    if(toWriteBags) {
+    	System.exit(0);
     }
   }
 
