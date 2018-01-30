@@ -126,12 +126,19 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     trainOnAnnotatedLfsOpt = parser.accepts("trainOnAnnotatedLfs")
     seq2TreeOpt = parser.accepts("seq2Tree")
     seq2SeqOpt = parser.accepts("seq2Seq")
+<<<<<<< HEAD
     toWriteBags = parser.accepts("toWriteBags")
     bagSize = parser.accepts("bagSize").withRequiredArg().ofType(classOf[Integer]).defaultsTo(10)
     numBags = parser.accepts("numBags").withRequiredArg().ofType(classOf[Integer]).defaultsTo(10)
 //    maxOnlyObjOpt = parser.accepts("maxOnlyObj")
     kOpt = parser.accepts("k").withRequiredArg().ofType(classOf[Integer]).defaultsTo(-1)
     marginOpt = parser.accepts("margin").withRequiredArg().ofType(classOf[Integer]).defaultsTo(-1)
+=======
+    maxOnlyObjOpt = parser.accepts("maxOnlyObj")
+    toWriteBags = parser.accepts("toWriteBags")
+    bagSize = parser.accepts("bagSize").withRequiredArg().ofType(classOf[Integer]).defaultsTo(10)
+    numBags = parser.accepts("numBags").withRequiredArg().ofType(classOf[Integer]).defaultsTo(10)
+>>>>>>> Added stuff for running exps smoothly
   }
 
   def initializeTrainingData(options: OptionSet, typeDeclaration: TypeDeclaration,
@@ -199,8 +206,12 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
 
   override def run(options: OptionSet): Unit = {
     // Initialize.initialize(Map("dynet-mem" -> "4096"))
+<<<<<<< HEAD
     Initialize.initialize(Map("dynet-mem" -> "15000"))
     //Initialize.initialize(Map("dynet-mem" -> "15000", "ncpus_requested" -> true))
+=======
+    Initialize.initialize(Map("dynet-mem" -> "8200"))
+>>>>>>> Added stuff for running exps smoothly
  
     val typeDeclaration = if (options.has(seq2TreeOpt)) {
       new Seq2TreeTypeDeclaration()
