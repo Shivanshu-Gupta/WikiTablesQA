@@ -43,3 +43,10 @@ lib/stanford-corenlp-*models.jar
 
 # logs
 experiments/wikitables/output/
+models/
+parallel_logs/
+parallel_logs_postpruned/
+parallel_logs_prepruned/
+*.sh.o*
+*.sh.e*
+
