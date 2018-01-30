@@ -9,7 +9,7 @@ FOLD=1
 # This is a subsample of 100 examples
 # TRAIN="$EXPERIMENT_DIR/random-split-$FOLD-train-100.examples"
 # Uncomment below to use the full training set.
-TRAIN="$EXPERIMENT_DIR/random-split-$FOLD-train.examples"
+TRAIN="$EXPERIMENT_DIR/random-split-$FOLD-train-bags.examples"
 
 # Development data used for evaluating model accuracy as training progresses.
 # Using a subsample here can reduce training time.

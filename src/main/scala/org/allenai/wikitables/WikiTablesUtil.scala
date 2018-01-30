@@ -243,7 +243,8 @@ object WikiTablesUtil {
     filename: String,
     derivationsPath: String,
     derivationsLimit: Int,
-    includeDerivations: Boolean
+    includeDerivations: Boolean,
+    toWriteBags: Boolean = false, bagSize: Integer = 10, numBags: Integer = 10
   ): Seq[WikiTablesExample] = {
     val preprocessedFile = filename + preprocessingSuffix
     val dataset = if (Files.exists(Paths.get(preprocessedFile))) {
@@ -255,7 +256,8 @@ object WikiTablesUtil {
         includeDerivations,
         derivationsPath,
         100,
-        MAX_DERIVATIONS
+        MAX_DERIVATIONS,
+        toWriteBags, bagSize, numBags
       ).asScala
       val pnpDataset = sempreDataset.map(convertCustomExampleToWikiTablesExample)
       saveDatasetToJson(pnpDataset, preprocessedFile)
@@ -284,13 +286,14 @@ object WikiTablesUtil {
       derivationsPath: String,
       derivationsLimit: Int,
       preprocessor: LfPreprocessor,
-      includeDerivations: Boolean = true
+      includeDerivations: Boolean = true,
+      toWriteBags: Boolean = false, bagSize: Integer = 10, numBags: Integer = 10
     ): Vector[RawExample] = {
     // The entity linker can become a parameter in the future
     // if it starts accepting parameters.
     val entityLinker = new WikiTablesEntityLinker()
     val trainingData = filenames.flatMap { filename => 
-      val examples = loadDataset(filename, derivationsPath, derivationsLimit, includeDerivations)
+      val examples = loadDataset(filename, derivationsPath, derivationsLimit, includeDerivations, toWriteBags, bagSize, numBags)
       val linkings = entityLinker.loadDataset(filename, examples)
       val tables = Table.loadDataset(filename, examples)
       

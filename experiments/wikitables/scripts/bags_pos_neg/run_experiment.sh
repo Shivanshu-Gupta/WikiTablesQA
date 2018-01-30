@@ -1,7 +1,7 @@
 #!/bin/bash -e
 
-EXPERIMENT_TYPE="dpd_bags_positive"
-source "experiments/wikitables/scripts/config.sh"
+EXPERIMENT_TYPE="dpd_bags_pos_neg"
+source "experiments/wikitables/scripts/bags_pos_neg/config.sh"
 
 MY_NAME="basic"
 MY_DIR=$EXPERIMENT_DIR/$MY_NAME/

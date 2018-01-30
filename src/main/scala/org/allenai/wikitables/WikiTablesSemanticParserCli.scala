@@ -92,6 +92,9 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   var seq2TreeOpt: OptionSpec[Void] = null
   var seq2SeqOpt: OptionSpec[Void] = null
   var maxOnlyObjOpt: OptionSpec[Void] = null
+  var toWriteBags: OptionSpec[Void] = null
+  var bagSize: OptionSpec[Integer] = null
+  var numBags: OptionSpec[Integer] = null
 
   // Initialize expression processing for Wikitables logical forms.
   val simplifier = ExpressionSimplifier.lambdaCalculus()
@@ -137,6 +140,9 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     seq2TreeOpt = parser.accepts("seq2Tree")
     seq2SeqOpt = parser.accepts("seq2Seq")
     maxOnlyObjOpt = parser.accepts("maxOnlyObj")
+    toWriteBags = parser.accepts("toWriteBags")
+    bagSize = parser.accepts("bagSize").withRequiredArg().ofType(classOf[Integer]).defaultsTo(10)
+    numBags = parser.accepts("numBags").withRequiredArg().ofType(classOf[Integer]).defaultsTo(10)
   }
 
   def initializeTrainingData(options: OptionSet, typeDeclaration: TypeDeclaration,
@@ -146,7 +152,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     val trainingData = loadDatasets(options.valuesOf(trainingDataOpt).asScala,
         options.valueOf(derivationsPathOpt),
         options.valueOf(maxDerivationsOpt),
-        preprocessor)
+        preprocessor, true, // default value of include_derivations
+        options.has(toWriteBags), options.valueOf(bagSize), options.valueOf(numBags))
 
     println("Read " + trainingData.size + " training examples")
     val (vocab, vocabCounts) = computeVocabulary(trainingData, options.valueOf(vocabThreshold))
@@ -202,7 +209,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   }
 
   override def run(options: OptionSet): Unit = {
-    Initialize.initialize(Map("dynet-mem" -> "4096"))
+    // Initialize.initialize(Map("dynet-mem" -> "4096"))
+    Initialize.initialize(Map("dynet-mem" -> "8200"))
  
     val typeDeclaration = if (options.has(seq2TreeOpt)) {
       new Seq2TreeTypeDeclaration()

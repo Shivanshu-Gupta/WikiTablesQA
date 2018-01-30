@@ -25,7 +25,8 @@ public class WikiTablesDataProcessor {
   
   public static List<CustomExample> getDataset(String path, boolean inSempreFormat,
                                                boolean includeDerivations, String derivationsPath,
-                                               int beamSize, int numDerivationsLimit) {
+                                               int beamSize, int numDerivationsLimit,
+                                               boolean toWriteBags, int bagSize, int numBags) {
     CoreNLPAnalyzer.opts.annotators = Arrays.asList(new String[] {"tokenize", "ssplit", "pos", "lemma", "ner"});
     EditDistanceFuzzyMatcher.opts.expandAbbreviations = true;
     EditDistanceFuzzyMatcher.opts.fuzzyMatchSubstring = true;
@@ -56,7 +57,7 @@ public class WikiTablesDataProcessor {
       if (derivationsPath == null) {
         computeDerivations(dataset, beamSize);
       } else {
-        addDerivations(dataset, derivationsPath, numDerivationsLimit);
+        addDerivations(dataset, derivationsPath, numDerivationsLimit, toWriteBags, bagSize, numBags);
       }
       int maxNumFormulas = 0;
       int minNumFormulas = (int) Double.POSITIVE_INFINITY;
@@ -117,16 +118,16 @@ public class WikiTablesDataProcessor {
     return ex;
   }
 
-  static void writeBagsPos(String derivationsPath, CustomExample ex, List<Pair<Integer, Formula>> formulasWithSizes) throws IOException{
+  static void writeBagsPos(String derivationsPath, CustomExample ex, List<Pair<Integer, Formula>> formulasWithSizes, int bagSize, int numBags) throws IOException{
   	int cnt = 0;
   	String exId = ex.getId();
   	BufferedWriter writer = null;
-  	for (Pair<Integer, Formula> p : formulasWithSizes.subList(0, Math.min(formulasWithSizes.size(), 100))){
-  		if (cnt % 10 == 0){
+  	for (Pair<Integer, Formula> p : formulasWithSizes.subList(0, Math.min(formulasWithSizes.size(), numBags*bagSize))){
+  		if (cnt % bagSize == 0){
   			if(writer != null){
   				writer.close();
   			}
-  			writer =  new BufferedWriter(new OutputStreamWriter(new GZIPOutputStream(new FileOutputStream(derivationsPath + "/" + exId + "_p"+(cnt/10)+".gz"))));
+  			writer =  new BufferedWriter(new OutputStreamWriter(new GZIPOutputStream(new FileOutputStream(derivationsPath + "/" + exId + "_p"+(cnt/bagSize)+".gz"))));
   		}
 	    writer.append(p.getSecond().toString()+"\n");
 	    cnt += 1;
@@ -138,17 +139,17 @@ public class WikiTablesDataProcessor {
 
   }
 
-  static void writeBagsNeg(String derivationsPath, CustomExample ex, List<Pair<Integer, Formula>> formulasWithSizes) throws IOException{
+  static void writeBagsNeg(String derivationsPath, CustomExample ex, List<Pair<Integer, Formula>> formulasWithSizes, int bagSize, int numBags) throws IOException{
   	int cnt = 0;
   	String exId = ex.getId();
   	BufferedWriter writer = null;
 
-  	for (Pair<Integer, Formula> p : formulasWithSizes.subList(Math.max(formulasWithSizes.size()-100,0), formulasWithSizes.size())){
-  		if (cnt % 10 == 0){
+  	for (Pair<Integer, Formula> p : formulasWithSizes.subList(Math.max(formulasWithSizes.size()-numBags*bagSize,0), formulasWithSizes.size())){
+  		if (cnt % bagSize == 0){
   			if(writer != null){
   				writer.close();
   			}
-  			writer =  new BufferedWriter(new OutputStreamWriter(new GZIPOutputStream(new FileOutputStream(derivationsPath + "/" + exId + "_n"+(cnt/10)+".gz"))));
+  			writer =  new BufferedWriter(new OutputStreamWriter(new GZIPOutputStream(new FileOutputStream(derivationsPath + "/" + exId + "_n"+(cnt/bagSize)+".gz"))));
   		}
 	    writer.append(p.getSecond().toString()+"\n");
 	    cnt += 1;
@@ -161,8 +162,8 @@ public class WikiTablesDataProcessor {
   }
 
   static void addDerivations(List<CustomExample> dataset, String derivationsPath,
-      int numDerivationsLimit) {
-  	boolean toWriteBags = true;
+      int numDerivationsLimit, boolean toWriteBags, int bagSize, int numBags) {
+  	// boolean toWriteBags = true;
     if (numDerivationsLimit != -1) {
       System.out.println("Limiting number of derivations per example to " + numDerivationsLimit);
     }
@@ -178,41 +179,36 @@ public class WikiTablesDataProcessor {
     	try {
           BufferedReader reader = new BufferedReader(new InputStreamReader(
               new GZIPInputStream(new FileInputStream(file))));
+          // BufferedWriter writer = new BufferedWriter(new FileWriter(derivationsPath + "/" + exId + ".tsv"));
           String line;
           while ((line = reader.readLine()) != null) {
+          	Expression2 e = ExpressionParser.expression2().parse(line);
+          	// writer.append(e.size()+"\t"+line+"\n");
             correctFormulas.add(Formula.fromString(line));
           }
+          // writer.close();
+          reader.close();
 	    } catch (IOException e) {
 	      e.printStackTrace();
 	    }
       }      
 
-      if (toWriteBags || (numDerivationsLimit >= 0 && correctFormulas.size() > numDerivationsLimit)) {        
+      if (numDerivationsLimit >= 0 && correctFormulas.size() > numDerivationsLimit) {        
         List<Pair<Integer, Formula>> formulasWithSizes = Lists.newArrayList();
         for (Formula f : correctFormulas) {
           Expression2 e = ExpressionParser.expression2().parse(f.toString());
           formulasWithSizes.add(Pair.newPair(e.size(), f));
         }
 
-        formulasWithSizes.sort(new DerivationLengthComparator());
-        if(toWriteBags) {
-        	try{
-        		writeBagsPos(derivationsPath, ex,formulasWithSizes);
-        	} catch (IOException e){
-        		e.printStackTrace();
-        	}
-        } else {
-        	correctFormulas.clear();
-	        for (Pair<Integer, Formula> p : formulasWithSizes.subList(0, numDerivationsLimit)) {
-	          correctFormulas.add(p.getSecond());
-	        }	
+    	formulasWithSizes.sort(new DerivationLengthComparator());
+    	correctFormulas.clear();
+        for (Pair<Integer, Formula> p : formulasWithSizes.subList(0, numDerivationsLimit)) {
+          correctFormulas.add(p.getSecond());
         }
       }
       ex.alternativeFormulas = correctFormulas;
     }
-    if(toWriteBags) {
-    	System.exit(0);
-    }
+    // System.exit(0);
   }
 
   static Builder getSempreBuilder(int beamSize) {
