@@ -61,10 +61,10 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
                 if(wikiexample.id.split('_')(1).startsWith("p")) {
                   sortedLosses.last
                 } else {
-                  -sortedLosses.head
+                  Expression.log(1 - Expression.exp(sortedLosses.head))
                 }
               } else {
-                sortedLosses.last - sortedLosses.head
+                Expression.log(Expression.exp(sortedLosses.last) + 1 - Expression.exp(sortedLosses.head))
               }
             } else {
               if(margin == -1) {
@@ -73,13 +73,13 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
                   Expression.logSumExp(new ExpressionVector(corr))
                 } else {
                   val incorr = sortedLosses.reverse.take(k)
-                  Expression.log(-Expression.sum(new ExpressionVector(incorr.map(Expression.exp))))
+                  Expression.log(k - Expression.sum(new ExpressionVector(incorr.map(Expression.exp))))
                 }
               } else {
                 val corr = sortedLosses.take(k)
                 val incorr = sortedLosses.reverse.slice(k + margin, k + margin + k)
                 Expression.log(Expression.sum(new ExpressionVector(corr.map(Expression.exp)))
-                  - Expression.sum(new ExpressionVector(incorr.map(Expression.exp))))
+                  + k - Expression.sum(new ExpressionVector(incorr.map(Expression.exp))))
               }
             }
           }
