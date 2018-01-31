@@ -1,9 +1,9 @@
 #!/bin/bash -e
 
-EXPERIMENT_TYPE="dpd_bags_positive"
+EXPERIMENT_TYPE="debug100"
 source "experiments/wikitables/scripts/config.sh"
 
-MY_NAME="basic"
+MY_NAME="model"
 MY_DIR=$EXPERIMENT_DIR/$MY_NAME/
 MY_MODEL=$MY_DIR/parser_final.ser
 MODEL_DIR=$MY_DIR/models/
