@@ -91,16 +91,12 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   var trainOnAnnotatedLfsOpt: OptionSpec[Void] = null
   var seq2TreeOpt: OptionSpec[Void] = null
   var seq2SeqOpt: OptionSpec[Void] = null
-<<<<<<< HEAD
-  var maxOnlyObjOpt: OptionSpec[Void] = null
   var toWriteBags: OptionSpec[Void] = null
   var bagSize: OptionSpec[Integer] = null
   var numBags: OptionSpec[Integer] = null
-=======
 //  var maxOnlyObjOpt: OptionSpec[Void] = null
   var kOpt: OptionSpec[Integer] = null
   var marginOpt: OptionSpec[Integer] = null
->>>>>>> implemented MIL objective functions
 
   // Initialize expression processing for Wikitables logical forms.
   val simplifier = ExpressionSimplifier.lambdaCalculus()
@@ -145,16 +141,12 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     trainOnAnnotatedLfsOpt = parser.accepts("trainOnAnnotatedLfs")
     seq2TreeOpt = parser.accepts("seq2Tree")
     seq2SeqOpt = parser.accepts("seq2Seq")
-<<<<<<< HEAD
-    maxOnlyObjOpt = parser.accepts("maxOnlyObj")
     toWriteBags = parser.accepts("toWriteBags")
     bagSize = parser.accepts("bagSize").withRequiredArg().ofType(classOf[Integer]).defaultsTo(10)
     numBags = parser.accepts("numBags").withRequiredArg().ofType(classOf[Integer]).defaultsTo(10)
-=======
 //    maxOnlyObjOpt = parser.accepts("maxOnlyObj")
     kOpt = parser.accepts("k").withRequiredArg().ofType(classOf[Integer]).defaultsTo(-1)
     marginOpt = parser.accepts("margin").withRequiredArg().ofType(classOf[Integer]).defaultsTo(-1)
->>>>>>> implemented MIL objective functions
   }
 
   def initializeTrainingData(options: OptionSet, typeDeclaration: TypeDeclaration,
