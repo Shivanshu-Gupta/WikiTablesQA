@@ -52,7 +52,6 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
   }
 
   def train[A](examples: Seq[PnpExample[A]], wikiexamples: Seq[WikiTablesExample] = null): Unit = {
-    maxOnlyObj = true
     for (i <- 0 until epochs) {
       var loss = 0.0
       var searchErrors = 0
