@@ -22,6 +22,7 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
 
       log.startTimer("pp_loglikelihood")
       for ((wikiexample, example)<- Random.shuffle(wikiexamples zip examples)) {
+        //println(wikiexample.id)
         ComputationGraph.renew()
 
         val env = example.env
@@ -35,7 +36,7 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
         
         log.startTimer("pp_loglikelihood/build_loss")
         val exLosses = conditional.executions.map(_.env.getScore)
-
+        //println(exLosses)
         val logProbExpr = if (exLosses.isEmpty) {
           Preconditions.checkState(sumMultipleExecutions,
             "Found %s conditional executions (expected exactly 1) for example: %s",
@@ -51,7 +52,6 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
           Preconditions.checkState(sumMultipleExecutions,
             "Found %s conditional executions (expected exactly 1) for example: %s",
             conditional.executions.size.asInstanceOf[AnyRef], example)
-
           if(k == -1) {
             Expression.logSumExp(new ExpressionVector(exLosses))
           } else {
@@ -76,10 +76,17 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
                   Expression.log(k - Expression.sum(new ExpressionVector(incorr.map(Expression.exp))))
                 }
               } else {
-                val corr = sortedLosses.take(k)
-                val incorr = sortedLosses.reverse.slice(k + margin, k + margin + k)
-                Expression.log(Expression.sum(new ExpressionVector(corr.map(Expression.exp)))
+                if(sortedLosses.length >= k + margin + k) {
+                  val corr = sortedLosses.take(k)
+                  val incorr = sortedLosses.reverse.slice(k + margin, k + margin + k)
+                  Expression.log(Expression.sum(new ExpressionVector(corr.map(Expression.exp)))
                   + k - Expression.sum(new ExpressionVector(incorr.map(Expression.exp))))
+                } else {
+                  val corr = sortedLosses.take(Math.min(k, sortedLosses.length/2))
+                  val incorr = sortedLosses.reverse.take(Math.min(k, sortedLosses.length/2))
+                  Expression.log(Expression.sum(new ExpressionVector(corr.map(Expression.exp)))
+                  + incorr.length - Expression.sum(new ExpressionVector(incorr.map(Expression.exp))))
+                }
               }
             }
           }

@@ -17,6 +17,8 @@ mkdir -p $MODEL_DIR
 
 ./$SCRIPT_DIR/run.sh org.allenai.wikitables.TestWikiTablesCli --testData $DEV --model $MY_MODEL --beamSize $TEST_BEAM_SIZE --maxDerivations $MAX_TEST_DERIVATIONS --tsvOutput $TSV_OUT --derivationsPath $DERIVATIONS_PATH &> $DEV_LOG
 
+source activate snowflakes
+
 python data/WikiTableQuestions/evaluator.py -t data/WikiTableQuestions/tagged/data/ $TSV_OUT > $OFFICIAL 2> $OFFICIAL_TXT
 
 cut -f1,2 $OFFICIAL | sort | tr '[:upper:]' '[:lower:]' | sed -e "s/[[:space:]]/ /" > $OFFICIAL_CORRECT_MAP

@@ -1,0 +1,3 @@
+name=basic_dev1
+qsub -P cse -q low -N $name -e logs/$name.err -o logs/$name.out -lselect=1:ncpus=8:ngpus=1:mem=20G -lwalltime=12:00:00 -V -v EXPERIMENT_TYPE=basic,MODEL_NAME=dev1,K=-1,MARGIN=-1,BEAM_SIZE=5 ./experiments/wikitables/scripts/run_experiment.sh
+

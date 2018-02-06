@@ -49,4 +49,4 @@ parallel_logs_postpruned/
 parallel_logs_prepruned/
 *.sh.o*
 *.sh.e*
-
+logs/

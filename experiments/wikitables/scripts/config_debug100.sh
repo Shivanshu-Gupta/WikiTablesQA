@@ -7,18 +7,18 @@ FOLD=1
 
 # Training data.
 # This is a subsample of 100 examples
-TRAIN="$EXPERIMENT_DIR/dpd_output/random-split-$FOLD-train-100.examples"
+TRAIN="$EXPERIMENT_DIR/random-split-$FOLD-train-100-bags.examples"
 # Uncomment below to use the full training set.
 # TRAIN="$EXPERIMENT_DIR/random-split-$FOLD-train.examples"
 
 # Development data used for evaluating model accuracy as training progresses.
 # Using a subsample here can reduce training time.
-TRAIN_DEV="$EXPERIMENT_DIR/dpd_output/random-split-$FOLD-dev-100.examples"
+TRAIN_DEV="$EXPERIMENT_DIR/random-split-$FOLD-dev-100.examples"
 # Uncomment below to use the full dev set.
 # TRAIN_DEV="$EXPERIMENT_DIR/random-split-$FOLD-dev.examples"
 
 # Development data for evaluating the final trained model.
-DEV="$EXPERIMENT_DIR/dpd_output/random-split-$FOLD-dev-100.examples"
+DEV="$EXPERIMENT_DIR/random-split-$FOLD-dev-100.examples"
 # Uncomment below to use the full dev set.
 # DEV="$EXPERIMENT_DIR/random-split-$FOLD-dev.examples"
 # Uncomment below to use the test set.
@@ -31,7 +31,7 @@ DERIVATIONS_PATH="$EXPERIMENT_DIR/dpd_output/"
 EPOCHS=20
 MAX_TRAINING_DERIVATIONS=100
 MAX_TEST_DERIVATIONS=10
-BEAM_SIZE=5
+BEAM_SIZE=$BEAM_SIZE
 TEST_BEAM_SIZE=10
 VOCAB=2
 
