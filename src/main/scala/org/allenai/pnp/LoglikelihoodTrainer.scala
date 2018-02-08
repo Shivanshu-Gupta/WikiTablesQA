@@ -58,22 +58,23 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
       log.notifyIterationStart(i)
 
       log.startTimer("pp_loglikelihood")
-      for(i <- examples.indices by 10) {
+      val data = Random.shuffle((wikiexamples zip examples))
+      for(i <- data.indices by 10) {
         ComputationGraph.renew()
         var losses = new ListBuffer[Expression]()
-        for (j <- i until Math.min(i + 10, examples.length)) {
-          val wikiexample = wikiexamples(j)
-          val example = examples(j)
+        for (j <- i until Math.min(i + 10, data.length)) {
+          val wikiexample = data(j)._1
+          val example = data(j)._2
           val env = example.env
           val context = PnpInferenceContext.init(model).setLog(log)
           println("example: " + wikiexample.id)
           // Compute the distribution over correct executions.
-//          log.startTimer("pp_loglikelihood/forward")
+          log.startTimer("pp_loglikelihood/forward")
           val conditional = example.conditional.beamSearch(beamSize, -1,
             env, context.addExecutionScore(example.conditionalExecutionScore))
-//          log.stopTimer("pp_loglikelihood/forward")
+          log.stopTimer("pp_loglikelihood/forward")
 
-//          log.startTimer("pp_loglikelihood/build_loss")
+          log.startTimer("pp_loglikelihood/build_exloss")
           val exLosses = conditional.executions.map(_.env.getScore)
           //println(exLosses)
           val logProbExpr = if (exLosses.isEmpty) {
@@ -96,10 +97,11 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
               getLossExpr(wikiexample.id, exLosses)
             }
           }
-//          log.stopTimer("pp_loglikelihood/build_exloss")
-          losses += logProbExpr
+          log.stopTimer("pp_loglikelihood/build_exloss")
+          losses += -1.0f * logProbExpr
         }
         val lossExpr = Expression.sum(new ExpressionVector(losses.toList))
+        //val lossExpr = losses(0)
         if (lossExpr != null) {
           log.startTimer("pp_loglikelihood/eval_loss")
           loss += ComputationGraph.incrementalForward(lossExpr).toFloat
