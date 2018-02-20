@@ -9,7 +9,7 @@ def writeBags(bagsDir, examplesFile, bagsFile):
         if bagid.find('_') == -1:
             continue
         parts = bagid.split('_')
-        print(parts)
+        #print(parts)
         exid, bagid = parts[0], parts[1].split('.')[0]
         if exid not in ex_bags:
             ex_bags[exid] = []
@@ -30,9 +30,12 @@ def writeBags(bagsDir, examplesFile, bagsFile):
         for bag in bags:
             outf.write(bag)
 
-root = '/scratch/cse/dual/cs5130298/dpd/miml/'
-for x in ['pos_20', 'pos_40', 'pn_20', 'pn_40']:
+# NOTE: Change this for HPC
+#root = '/scratch/cse/dual/cs5130298/dpd/miml/'
+root = '/analytics/shivanshu/dpd/miml/'
+#for x in ['pos20', 'pos40', 'pn20', 'pn40']:
+for x in ['pos60', 'pos80', 'pos100', 'pn60', 'pn80', 'pn100']:
     dpdDir = root + 'dpd_postpruned_' +  x + '/'
     print(dpdDir)
-    for exFile in ['random-split-1-train-100', 'random-split-1-train']:
+    for exFile in ['random-split-1-train-100', 'random-split-1-train-500', 'random-split-1-train-1000', 'random-split-1-train-all']:
         writeBags(dpdDir, root + exFile + '.examples', dpdDir + exFile + '-bags.examples')

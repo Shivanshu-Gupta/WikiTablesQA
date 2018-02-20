@@ -50,3 +50,4 @@ parallel_logs_prepruned/
 *.sh.o*
 *.sh.e*
 logs/
+script.sh

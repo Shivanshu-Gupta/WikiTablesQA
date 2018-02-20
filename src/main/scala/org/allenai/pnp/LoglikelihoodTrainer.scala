@@ -15,16 +15,16 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
   Preconditions.checkArgument(model.locallyNormalized == true)
 
   def getLossExpr(exid: String, exLosses: Seq[Expression]) = {
-    val sortedLosses = exLosses.sortBy(ComputationGraph.incrementalForward(_).toFloat)
+    val sortedLosses = exLosses.sortBy(ComputationGraph.incrementalForward(_).toFloat).reverse
     if (k == 1) {
       if (margin == -1) {
         if (exid.split('_')(1).startsWith("p")) {
-          sortedLosses.last
+          sortedLosses.head
         } else {
-          Expression.log(1 - Expression.exp(sortedLosses.head))
+          Expression.log(1 - Expression.exp(sortedLosses.last))
         }
       } else {
-        Expression.log(Expression.exp(sortedLosses.last) + 1 - Expression.exp(sortedLosses.head))
+        Expression.log(Expression.exp(sortedLosses.head) + 1 - Expression.exp(sortedLosses.last))
       }
     } else {
       if (margin == -1) {
@@ -38,7 +38,7 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
       } else {
         if (sortedLosses.length >= k + margin + k) {
           val corr = sortedLosses.take(k)
-          val incorr = sortedLosses.reverse.slice(k + margin, k + margin + k)
+          val incorr = sortedLosses.slice(k + margin, k + margin + k)
           Expression.log(Expression.sum(new ExpressionVector(corr.map(Expression.exp)))
             + k - Expression.sum(new ExpressionVector(incorr.map(Expression.exp))))
         } else {
@@ -58,50 +58,42 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
       log.notifyIterationStart(i)
 
       log.startTimer("pp_loglikelihood")
-      val data = Random.shuffle((wikiexamples zip examples))
-      for(i <- data.indices by 10) {
+      for((wikiexample, example) <- Random.shuffle(wikiexamples zip examples)) {
         ComputationGraph.renew()
-        var losses = new ListBuffer[Expression]()
-        for (j <- i until Math.min(i + 10, data.length)) {
-          val wikiexample = data(j)._1
-          val example = data(j)._2
-          val env = example.env
-          val context = PnpInferenceContext.init(model).setLog(log)
-          println("example: " + wikiexample.id)
-          // Compute the distribution over correct executions.
-          log.startTimer("pp_loglikelihood/forward")
-          val conditional = example.conditional.beamSearch(beamSize, -1,
-            env, context.addExecutionScore(example.conditionalExecutionScore))
-          log.stopTimer("pp_loglikelihood/forward")
+        val env = example.env
+        val context = PnpInferenceContext.init(model).setLog(log)
+        //println("example: " + wikiexample.id)
+        // Compute the distribution over correct executions.
+        log.startTimer("pp_loglikelihood/forward")
+        val conditional = example.conditional.beamSearch(beamSize, -1,
+          env, context.addExecutionScore(example.conditionalExecutionScore))          
+        log.stopTimer("pp_loglikelihood/forward")
 
-          log.startTimer("pp_loglikelihood/build_exloss")
-          val exLosses = conditional.executions.map(_.env.getScore)
-          //println(exLosses)
-          val logProbExpr = if (exLosses.isEmpty) {
-            Preconditions.checkState(sumMultipleExecutions,
-              "Found %s conditional executions (expected exactly 1) for example: %s",
-              conditional.executions.size.asInstanceOf[AnyRef], example)
-            null
-          } else if (exLosses.length == 1) {
-            exLosses.head
+        log.startTimer("pp_loglikelihood/build_exloss")
+        val exLosses = conditional.executions.map(_.env.getScore)
+        //println(exLosses)
+        val logProbExpr = if (exLosses.isEmpty) {
+          Preconditions.checkState(sumMultipleExecutions,
+          "Found %s conditional executions (expected exactly 1) for example: %s",
+          conditional.executions.size.asInstanceOf[AnyRef], example)
+          null
+        } else if (exLosses.length == 1) {
+          exLosses.head
+        } else {
+          // This flag is used to ensure that training with a
+          // single label per example doesn't work "by accident"
+          // with an execution score that permits multiple labels.
+          Preconditions.checkState(sumMultipleExecutions,
+            "Found %s conditional executions (expected exactly 1) for example: %s",
+            conditional.executions.size.asInstanceOf[AnyRef], example)
+          if (k == -1) {
+             Expression.logSumExp(new ExpressionVector(exLosses))
           } else {
-            // This flag is used to ensure that training with a
-            // single label per example doesn't work "by accident"
-            // with an execution score that permits multiple labels.
-            Preconditions.checkState(sumMultipleExecutions,
-              "Found %s conditional executions (expected exactly 1) for example: %s",
-              conditional.executions.size.asInstanceOf[AnyRef], example)
-            if (k == -1) {
-              Expression.logSumExp(new ExpressionVector(exLosses))
-            } else {
-              getLossExpr(wikiexample.id, exLosses)
-            }
+            getLossExpr(wikiexample.id, exLosses)
           }
-          log.stopTimer("pp_loglikelihood/build_exloss")
-          losses += -1.0f * logProbExpr
         }
-        val lossExpr = Expression.sum(new ExpressionVector(losses.toList))
-        //val lossExpr = losses(0)
+        log.stopTimer("pp_loglikelihood/build_exloss")
+        val lossExpr = -1.0f * logProbExpr
         if (lossExpr != null) {
           log.startTimer("pp_loglikelihood/eval_loss")
           loss += ComputationGraph.incrementalForward(lossExpr).toFloat
