@@ -3,7 +3,7 @@ package org.allenai.pnp.semparse
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import scala.collection.mutable.{Map => MutableMap}
-import org.allenai.pnp.{Env, Pnp, PnpInferenceContext}
+import org.allenai.pnp.{Env, PnpInferenceContext}
 
 import com.jayantkrish.jklol.ccg.CcgExample
 import com.jayantkrish.jklol.ccg.lambda.Type
@@ -92,7 +92,8 @@ object SemanticParserUtils {
    * in each training example when the search is constrained
    * by the execution oracle.  
    */
-  def validateActionSpace(examples: Seq[CcgExample], parser: SemanticParser,
+//  def validateActionSpace(examples: Seq[CcgExample], parser: SemanticParser,
+def validateActionSpace(examples: Seq[CcgExample], parser: SemanticParser,
       typeDeclaration: TypeDeclaration): Unit = {
     println("")
     var maxParts = 0
