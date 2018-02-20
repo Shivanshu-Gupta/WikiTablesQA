@@ -1,16 +1,13 @@
 package org.allenai.wikitables
 
-import org.allenai.pnp.semparse.SemanticParser
-
+import org.allenai.pnp.semparse.{SemanticParser, SemanticParserLoss, SemanticParserNoPnp}
 import com.jayantkrish.jklol.ccg.lambda.TypeDeclaration
 import com.jayantkrish.jklol.ccg.lambda2.ExpressionComparator
 import com.jayantkrish.jklol.training.DefaultLogFunction
-
 import edu.cmu.dynet._
-import org.allenai.pnp.semparse.SemanticParserLoss
 
 class SemanticParserLogFunction(modelDir: Option[String], bestModel: Option[String],
-    parser: SemanticParser, trainExamples: Seq[WikiTablesExample],
+    parser: SemanticParserNoPnp, trainExamples: Seq[WikiTablesExample],
     devExamples: Seq[WikiTablesExample], devBeam: Int, firstDevEpoch: Int,
     typeDeclaration: TypeDeclaration, comparator: ExpressionComparator,
     preprocessor: LfPreprocessor) extends DefaultLogFunction {
@@ -22,7 +19,7 @@ class SemanticParserLogFunction(modelDir: Option[String], bestModel: Option[Stri
    */
   private def saveModel(filename: String): Unit = {
     val saver = new ModelSaver(filename)
-    parser.model.save(saver)
+//    parser.model.save(saver)
     parser.save(saver)
     saver.done()
   }
@@ -36,11 +33,13 @@ class SemanticParserLogFunction(modelDir: Option[String], bestModel: Option[Stri
     val curDropout = parser.dropoutProb
     parser.dropoutProb = -1
 
-    val (loss, denotations) = TestWikiTablesCli.test(examples, parser, devBeam, false, false,
-        typeDeclaration, comparator, preprocessor, (x:Any) => ())
-
-    parser.dropoutProb = curDropout
-    loss
+    // TODO: Implement This
+//    val (loss, denotations) = TestWikiTablesCli.test(examples, parser, devBeam, false, false,
+//        typeDeclaration, comparator, preprocessor, (x:Any) => ())
+//
+//    parser.dropoutProb = curDropout
+//    loss
+    null
   }
   
   override def notifyIterationEnd(iteration: Long) {
