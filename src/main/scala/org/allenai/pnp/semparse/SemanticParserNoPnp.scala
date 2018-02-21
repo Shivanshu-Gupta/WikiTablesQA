@@ -330,7 +330,7 @@ class SemanticParserNoPnp(val actionSpace: ActionSpace, val vocab: IndexedList[S
     neighborProj + typeProj
   }
 
-  def generateLogProbs(wikiexample: WikiTablesExample, typeDeclaration: TypeDeclaration):
+  def generateLogProbs(wikiexample: WikiTablesExample):
   List[(Expression2, Expression)] = {
 
     val sentence = wikiexample.sentence
@@ -344,29 +344,18 @@ class SemanticParserNoPnp(val actionSpace: ActionSpace, val vocab: IndexedList[S
     val rootWeights = Expression.parameter(params(SemanticParserNoPnp.ROOT_WEIGHTS_PARAM))
     val rootBias = Expression.parameter(params(SemanticParserNoPnp.ROOT_BIAS_PARAM))
     val rootScores = Expression.logSoftmax((rootWeights * input.sentEmbedding) + rootBias)
-    val groupLfs = wikiexample.logicalForms.toList.groupBy {lf =>
-      val typeMap = StaticAnalysis.inferTypeMap(lf, TypeDeclaration.TOP, typeDeclaration)
-        .asScala.toMap
-      typeMap(0)
-    }
     for {
-      (rootType, lfs) <- groupLfs.toList
+      (rootType, lfTemplateSeqs) <- wikiexample.groupedTemplateSeqs
       rootScore = Expression.pick(rootScores, actionSpace.rootTypes.indexOf(rootType))
       state = SemanticParserState.start()
-      allTemplates = for {
-        lf <- lfs
-        (_, templates) <- generateActionSequence(lf, entityLinking, typeDeclaration)
-      } yield {
-        templates
-      }
-      (expr, logProb) <- parse(input, actionBuilder, state.addRootType(rootType), rootScore, allTemplates)
+      (expr, logProb) <- parse(input, actionBuilder, state.addRootType(rootType), rootScore, lfTemplateSeqs.map(_._2))
     } yield {
       (expr.decodeExpression, logProb)
     }
   }
 
   private def parse(input: InputEncoding, builder: RnnBuilder,
-      startState: SemanticParserState, lfScore: Expression, templates: List[List[Template]] = null):
+      startState: SemanticParserState, lfScore: Expression, templates: List[List[Template]]):
   List[(SemanticParserState, Expression)] = {
     // Initialize the output LSTM before generating the logical form.
     builder.startNewSequence(input.rnnState)

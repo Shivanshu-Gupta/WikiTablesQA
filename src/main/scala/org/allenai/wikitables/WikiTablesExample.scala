@@ -1,11 +1,14 @@
 package org.allenai.wikitables
 
+import com.jayantkrish.jklol.ccg.lambda.Type
+
 import scala.collection.JavaConverters._
 import com.jayantkrish.jklol.ccg.lambda2.Expression2
 import com.jayantkrish.jklol.nlpannotation.AnnotatedSentence
 import edu.stanford.nlp.sempre._
 import edu.stanford.nlp.sempre.tables.TableKnowledgeGraph
 import fig.basic.LispTree
+import org.allenai.pnp.semparse.Template
 
 import scala.util.Try
 
@@ -28,6 +31,7 @@ case class WikiTablesExample(
     case Some(lf) => Set(lf)
   }
 
+  var groupedTemplateSeqs: List[(Type, List[(Expression2, List[Template])])] = null
   /**
    * Loads the knowledge graph into memory, from the `tableString` constructor argument.  We do not
    * keep a reference to this object, so it can get garbage collected when the caller is done with
