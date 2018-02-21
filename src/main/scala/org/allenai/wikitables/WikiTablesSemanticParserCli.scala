@@ -20,10 +20,7 @@ import scala.util.Random
 import scala.collection.mutable.ListBuffer
 import org.allenai.pnp.LoglikelihoodTrainer
 import org.allenai.pnp.BsoTrainer
-import org.allenai.pnp.semparse.Entity
-import org.allenai.pnp.semparse.Span
-import org.allenai.pnp.semparse.{ActionSpace, ConstantTemplate, ApplicationTemplate}
-import org.allenai.pnp.semparse.{SemanticParserConfig, SemanticParserNoPnp, SemanticParserUtils}
+import org.allenai.pnp.semparse._
 
 /** Command line program for training a semantic parser
   * on the WikiTables data set.
@@ -299,22 +296,6 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
       bestModelOutput: Option[String], k: Int, margin: Int): Unit = {
 
     parser.dropoutProb = dropout
-//    val pnpExamples = for {
-//      x <- trainingExamples
-//      sentence = x.sentence
-//      tokenIds = sentence.getAnnotation("tokenIds").asInstanceOf[Array[Int]]
-//      entityLinking = sentence.getAnnotation("entityLinking").asInstanceOf[EntityLinking]
-//      unconditional = parser.generateExpression(tokenIds, entityLinking)
-//      oracle <- if (laso) {
-//        parser.getMultiMarginScore(x.logicalForms, entityLinking, typeDeclaration)
-//      } else {
-//        parser.getMultiLabelScore(x.logicalForms, entityLinking, typeDeclaration)
-//      }
-//    } yield {
-//      PnpExample(unconditional, unconditional, Env.init, oracle)
-//    }
-
-//    println(pnpExamples.size + " training examples after oracle generation.")
 
     // If we have dev examples, subsample the same number of training examples
     // for evaluating parser accuracy as training progresses.
