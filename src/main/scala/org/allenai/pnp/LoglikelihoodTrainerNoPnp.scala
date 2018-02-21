@@ -60,14 +60,15 @@ class LoglikelihoodTrainerNoPnp(val epochs: Int, val sumMultipleExecutions: Bool
 
       log.startTimer("pp_loglikelihood")
       for(wikiexample <- Random.shuffle(wikiexamples)) {
-        ComputationGraph.renew()
+//        println(wikiexample.id)
+        ComputationGraph.renew( )
         // Compute the distribution over correct executions.
         log.startTimer("pp_loglikelihood/forward")
         val results = parser.generateLogProbs(wikiexample, typeDeclaration)
         log.stopTimer("pp_loglikelihood/forward")
 
         log.startTimer("pp_loglikelihood/build_exloss")
-        val exLosses = results.filter(_.isDefined).map(_.get._2)
+        val exLosses = results.map(_._2)
         //println(exLosses)
         val logProbExpr = if (exLosses.isEmpty) {
           Preconditions.checkState(sumMultipleExecutions,
