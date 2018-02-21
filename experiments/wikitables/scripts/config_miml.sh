@@ -1,8 +1,8 @@
 #!/bin/bash -e
 
 SCRIPT_DIR="experiments/wikitables/scripts/"
-#EXPERIMENT_DIR="/scratch/cse/dual/cs5130298/dpd/miml/experiments/$EXP_NAME"
-EXPERIMENT_DIR="/analytics/shivanshu/dpd/miml/experiments/$EXP_TYPE/$EXP_ID"
+EXPERIMENT_DIR="/scratch/cse/dual/cs5130298/dpd/miml/experiments/$EXP_TYPE/$EXP_ID"
+#EXPERIMENT_DIR="/analytics/shivanshu/dpd/miml/experiments/$EXP_TYPE/$EXP_ID"
 # Which fold to train on.
 FOLD=1
 
