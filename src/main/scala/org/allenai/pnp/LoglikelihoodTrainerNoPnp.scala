@@ -4,9 +4,10 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import com.google.common.base.Preconditions
 import com.jayantkrish.jklol.ccg.lambda.TypeDeclaration
+import com.jayantkrish.jklol.ccg.lambda2.StaticAnalysis
 import com.jayantkrish.jklol.training.LogFunction
 import edu.cmu.dynet._
-import org.allenai.pnp.semparse.SemanticParserNoPnp
+import org.allenai.pnp.semparse.{EntityLinking, SemanticParserNoPnp}
 import org.allenai.wikitables.WikiTablesExample
 
 import scala.util.Random
@@ -53,6 +54,16 @@ class LoglikelihoodTrainerNoPnp(val epochs: Int, val sumMultipleExecutions: Bool
   }
 
   def train[A](wikiexamples: Seq[WikiTablesExample] = null): Unit = {
+    wikiexamples.foreach { ex =>
+      val entityLinking = ex.sentence.getAnnotation("entityLinking").asInstanceOf[EntityLinking]
+      ex.groupedTemplateSeqs = ex.logicalForms.toList.flatMap {lf =>
+        parser.generateActionSequence(lf, entityLinking, typeDeclaration).map(y => (lf, y._2))
+      }.groupBy{lfTemplatePair =>
+        val typeMap = StaticAnalysis.inferTypeMap(lfTemplatePair._1, TypeDeclaration.TOP, typeDeclaration)
+          .asScala.toMap
+        typeMap(0)
+      }.toList
+    }
     for (i <- 0 until epochs) {
       var loss = 0.0
       var searchErrors = 0
@@ -64,7 +75,7 @@ class LoglikelihoodTrainerNoPnp(val epochs: Int, val sumMultipleExecutions: Bool
         ComputationGraph.renew( )
         // Compute the distribution over correct executions.
         log.startTimer("pp_loglikelihood/forward")
-        val results = parser.generateLogProbs(wikiexample, typeDeclaration)
+        val results = parser.generateLogProbs(wikiexample)
         log.stopTimer("pp_loglikelihood/forward")
 
         log.startTimer("pp_loglikelihood/build_exloss")

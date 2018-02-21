@@ -268,7 +268,7 @@ object TestWikiTablesCli {
       // Re-parse with a label oracle to find the highest-scoring correct parses.
       if (evaluateOracle) {
         if (e.logicalForms.nonEmpty) {
-          val results = parser.generateLogProbs(e, typeDeclaration)
+          val results = parser.generateLogProbs(e)
 
           results.foreach { x =>
             val logProb = ComputationGraph.incrementalForward(x._2).toFloat
