@@ -245,7 +245,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     val combineApplications = options.has(seq2TreeOpt) || options.has(seq2SeqOpt)
     val actionSpace = getActionSpace(wellTypedTrainingLfs, typeDeclaration, combineApplications)
 
-    val model = PnpModel.init(true)
+//    val model = PnpModel.init(true)
     val config = new SemanticParserConfig()
     config.inputDim = options.valueOf(inputDimOpt)
     config.hiddenDim = options.valueOf(hiddenDimOpt)

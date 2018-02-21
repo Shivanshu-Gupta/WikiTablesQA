@@ -34,12 +34,11 @@ class SemanticParserLogFunction(modelDir: Option[String], bestModel: Option[Stri
     parser.dropoutProb = -1
 
     // TODO: Implement This
-//    val (loss, denotations) = TestWikiTablesCli.test(examples, parser, devBeam, false, false,
-//        typeDeclaration, comparator, preprocessor, (x:Any) => ())
-//
-//    parser.dropoutProb = curDropout
-//    loss
-    null
+    val (loss, denotations) = TestWikiTablesCli.test(examples, parser, devBeam, false, false,
+        typeDeclaration, comparator, preprocessor, (x:Any) => ())
+
+    parser.dropoutProb = curDropout
+    loss
   }
   
   override def notifyIterationEnd(iteration: Long) {

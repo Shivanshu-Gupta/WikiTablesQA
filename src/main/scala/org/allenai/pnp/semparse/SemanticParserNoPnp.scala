@@ -6,8 +6,7 @@ import scala.collection.mutable.ListBuffer
 import scala.collection.mutable.{Map => MutableMap}
 import scala.collection.mutable.MultiMap
 import scala.collection.mutable.{Set => MutableSet}
-import org.allenai.pnp.CompGraph
-import org.allenai.pnp.Env
+import org.allenai.pnp.{CompGraph, Env, Pnp}
 import org.allenai.pnp.ExecutionScore.ExecutionScore
 import org.allenai.wikitables.WikiTablesExample
 //import org.allenai.pnp.Pnp
@@ -332,7 +331,7 @@ class SemanticParserNoPnp(val actionSpace: ActionSpace, val vocab: IndexedList[S
   }
 
   def generateLogProbs(wikiexample: WikiTablesExample, typeDeclaration: TypeDeclaration):
-  List[Option[(Expression2, Expression)]] = {
+  List[(Expression2, Expression)] = {
 
     val sentence = wikiexample.sentence
     val tokens = sentence.getAnnotation("tokenIds").asInstanceOf[Array[Int]]
@@ -345,54 +344,30 @@ class SemanticParserNoPnp(val actionSpace: ActionSpace, val vocab: IndexedList[S
     val rootWeights = Expression.parameter(params(SemanticParserNoPnp.ROOT_WEIGHTS_PARAM))
     val rootBias = Expression.parameter(params(SemanticParserNoPnp.ROOT_BIAS_PARAM))
     val rootScores = Expression.logSoftmax((rootWeights * input.sentEmbedding) + rootBias)
-    wikiexample.logicalForms.toList.map(lf => {
-      for {
-        (holeTypes, templates) <- generateActionSequence(lf, entityLinking, typeDeclaration)
-        state = SemanticParserState.start()
-        typeMap = StaticAnalysis.inferTypeMap(lf, TypeDeclaration.TOP, typeDeclaration)
-          .asScala.toMap
-
-        rootType = typeMap(0)
-        lfScore = Expression.pick(rootScores, actionSpace.rootTypes.indexOf(rootType))
-        // _ = println("parsing 2")
-        // Recursively generate a logical form using an LSTM to
-        // select logical form templates to expand on typed holes
-        // in the partially-generated logical form.
-        (expr, logProb) = parse(input, actionBuilder, state.addRootType(rootType), lfScore, templates)
+    val groupLfs = wikiexample.logicalForms.toList.groupBy {lf =>
+      val typeMap = StaticAnalysis.inferTypeMap(lf, TypeDeclaration.TOP, typeDeclaration)
+        .asScala.toMap
+      typeMap(0)
+    }
+    for {
+      (rootType, lfs) <- groupLfs.toList
+      rootScore = Expression.pick(rootScores, actionSpace.rootTypes.indexOf(rootType))
+      state = SemanticParserState.start()
+      allTemplates = for {
+        lf <- lfs
+        (_, templates) <- generateActionSequence(lf, entityLinking, typeDeclaration)
       } yield {
-        (expr.decodeExpression, logProb)
+        templates
       }
-    })
+      (expr, logProb) <- parse(input, actionBuilder, state.addRootType(rootType), rootScore, allTemplates)
+    } yield {
+      (expr.decodeExpression, logProb)
+    }
   }
 
-//  def parse(tokens: Array[Int], entityLinking: EntityLinking): SemanticParserState = {
-//    for {
-//      // Encode input tokens using an LSTM.
-//      input <- encode(tokens, entityLinking)
-//
-//      // _ = println("parsing")
-//      state = SemanticParserState.start
-//
-//      // Choose the root type for the logical form given the
-//      // final output of the LSTM.
-//      rootWeights <- Pnp.param(SemanticParser.ROOT_WEIGHTS_PARAM)
-//      rootBias <- Pnp.param(SemanticParser.ROOT_BIAS_PARAM)
-//      rootScores = (rootWeights * input.sentEmbedding) + rootBias
-//      rootType <- Pnp.choose(actionSpace.rootTypes, rootScores, state)
-//
-//      // _ = println("parsing 2")
-//      // Recursively generate a logical form using an LSTM to
-//      // select logical form templates to expand on typed holes
-//      // in the partially-generated logical form.
-//      expr <- parse(input, actionBuilder, state.addRootType(rootType))
-//    } yield {
-//      expr
-//    }
-//  }
-
   private def parse(input: InputEncoding, builder: RnnBuilder,
-      startState: SemanticParserState, lfScore: Expression, templates: List[Template]):
-  (SemanticParserState, Expression) = {
+      startState: SemanticParserState, lfScore: Expression, templates: List[List[Template]] = null):
+  List[(SemanticParserState, Expression)] = {
     // Initialize the output LSTM before generating the logical form.
     builder.startNewSequence(input.rnnState)
     val startRnnState = builder.state()
@@ -410,11 +385,11 @@ class SemanticParserNoPnp(val actionSpace: ActionSpace, val vocab: IndexedList[S
     * apply.
     */
   private def parse(input: InputEncoding, builder: RnnBuilder, prevInput: Expression,
-      rnnState: Int, state: SemanticParserState, lfScore: Expression, templates: List[Template], idx: Int):
-  (SemanticParserState, Expression) = {
+      rnnState: Int, state: SemanticParserState, lfScore: Expression, templateSeqs: List[List[Template]], idx: Int):
+  List[(SemanticParserState, Expression)] = {
     if (state.unfilledHoleIds.isEmpty) {
       // If there are no holes, return the completed logical form.
-      (state, lfScore)
+      templateSeqs.map(_ => (state, lfScore))
     } else {
       // Select the first unfilled hole and select the
       // applicable templates given the hole's type.
@@ -506,45 +481,232 @@ class SemanticParserNoPnp(val actionSpace: ActionSpace, val vocab: IndexedList[S
       if (allTemplates.isEmpty) {
         println("Warning: no actions from hole " + hole)
       }
-      // TODO: Select the appropriate template
-//      val templateTuple = Pnp.choose(allTemplates.zipWithIndex.toArray, allScores, state)
-      val template = templates(idx)
-      val templateTuple = (template, allTemplates.indexOf(template))
-      val nextLfScore = lfScore + Expression.pick(Expression.logSoftmax(allScores), templateTuple._2)
-      val nextState = templateTuple._1.apply(state).addAttention(wordAttentions)
-
-      // Get the LSTM input parameters associated with the chosen
-      // template.
-      val actionLookup = lookupParams(SemanticParserNoPnp.ACTION_LOOKUP_PARAM + hole.t)
-      val entityLookup = lookupParams(SemanticParserNoPnp.ENTITY_LOOKUP_PARAM + hole.t)
-      val index = templateTuple._2
-      val actionInput = if (index < baseTemplates.length) {
-        Expression.lookup(actionLookup, templateTuple._2)
-      } else {
-        // TODO: using a single parameter vector for all entities of a given type
-        // seems suboptimal.
-        Expression.lookup(entityLookup, 0)
-      }
-
-      val actionLstmInputWeights = Expression.parameter(params(SemanticParserNoPnp.ACTION_LSTM_INPUT_WEIGHTS))
-      val actionLstmInputBias = Expression.parameter(params(SemanticParserNoPnp.ACTION_LSTM_INPUT_BIAS))
-      val lstmInput1 = concatenateArray(Array(actionInput, attentionVector))
-      val lstmInput2 = if (config.actionLstmHiddenLayer) {
-        val hidden = (actionLstmInputWeights * lstmInput1) + actionLstmInputBias
-        if (config.relu) {
-          Expression.rectify(hidden)
+      val groups = templateSeqs.groupBy(_(idx)).toList
+      for {
+        (template, templates) <- groups
+        templateTuple = (template, allTemplates.indexOf(template))
+        nextLfScore = lfScore + Expression.pick(Expression.logSoftmax(allScores), templateTuple._2)
+        nextState = templateTuple._1.apply(state).addAttention(wordAttentions)
+        // Get the LSTM input parameters associated with the chosen
+        // template.
+        actionLookup = lookupParams(SemanticParserNoPnp.ACTION_LOOKUP_PARAM + hole.t)
+        entityLookup = lookupParams(SemanticParserNoPnp.ENTITY_LOOKUP_PARAM + hole.t)
+        index = templateTuple._2
+        actionInput = if (index < baseTemplates.length) {
+          Expression.lookup(actionLookup, templateTuple._2)
         } else {
-          Expression.tanh(hidden)
+          // TODO: using a single parameter vector for all entities of a given type
+          // seems suboptimal.
+          Expression.lookup(entityLookup, 0)
         }
+
+        actionLstmInputWeights = Expression.parameter(params(SemanticParserNoPnp.ACTION_LSTM_INPUT_WEIGHTS))
+        actionLstmInputBias = Expression.parameter(params(SemanticParserNoPnp.ACTION_LSTM_INPUT_BIAS))
+        lstmInput1 = concatenateArray(Array(actionInput, attentionVector))
+        lstmInput2 = if (config.actionLstmHiddenLayer) {
+          val hidden = (actionLstmInputWeights * lstmInput1) + actionLstmInputBias
+          if (config.relu) {
+            Expression.rectify(hidden)
+          } else {
+            Expression.tanh(hidden)
+          }
+        } else {
+          lstmInput1
+        }
+
+        // _ = println("recursing")
+        // Recursively fill in any remaining holes.
+        (returnState, totalLfScore) <- parse(input, builder, lstmInput2, nextRnnState,
+          nextState, nextLfScore, templates, idx + 1)
+      } yield {
+        (returnState, totalLfScore)
+      }
+    }
+  }
+
+  /** Generate a distribution over logical forms given
+    * tokens.
+    */
+  def parse(tokens: Array[Int], entityLinking: EntityLinking): Pnp[SemanticParserState] = {
+    val input = encode(tokens, entityLinking)
+
+    // _ = println("parsing")
+    val state = SemanticParserState.start
+
+    // Choose the root type for the logical form given the
+    // final output of the LSTM.
+    val rootWeights = Expression.parameter(params(SemanticParserNoPnp.ROOT_WEIGHTS_PARAM))
+    val rootBias = Expression.parameter(params(SemanticParserNoPnp.ROOT_BIAS_PARAM))
+    val rootScores = Expression.logSoftmax((rootWeights * input.sentEmbedding) + rootBias)
+    for {
+      // Encode input tokens using an LSTM.
+      rootType <- Pnp.choose(actionSpace.rootTypes, rootScores, state)
+
+      // _ = println("parsing 2")
+      // Recursively generate a logical form using an LSTM to
+      // select logical form templates to expand on typed holes
+      // in the partially-generated logical form.
+      expr <- parse(input, actionBuilder, state.addRootType(rootType))
+    } yield {
+      expr
+    }
+  }
+
+  private def parse(input: InputEncoding, builder: RnnBuilder,
+                    startState: SemanticParserState): Pnp[SemanticParserState] = {
+    // Initialize the output LSTM before generating the logical form.
+    builder.startNewSequence(input.rnnState)
+    val startRnnState = builder.state()
+    val beginActionsParam = Expression.parameter(params(SemanticParserNoPnp.BEGIN_ACTIONS +
+      startState.unfilledHoleIds.head.t))
+    for {
+      e <- parse(input, builder, beginActionsParam, startRnnState, startState)
+    } yield {
+      e
+    }
+  }
+
+  /** Recursively generates a logical form from a partial logical
+    * form containing typed holes. Each application fills a single
+    * hole with a template representing a constant, application or
+    * lambda expression. These templates may contain additional holes
+    * to be filled in the future. An LSTM is used to encode the history
+    * of previously generated templates and select which template to
+    * apply.
+    */
+  private def parse(input: InputEncoding, builder: RnnBuilder, prevInput: Expression,
+                    rnnState: Int, state: SemanticParserState): Pnp[SemanticParserState] = {
+    if (state.unfilledHoleIds.isEmpty) {
+      // If there are no holes, return the completed logical form.
+      Pnp.value(state)
+    } else {
+      // Select the first unfilled hole and select the
+      // applicable templates given the hole's type.
+      val hole = state.unfilledHoleIds.head
+      val actionTemplates = actionSpace.getTemplates(hole.t)
+      val allVariableTemplates = hole.scope.getVariableTemplates(hole.t)
+      val variableTemplates = if (allVariableTemplates.length > config.maxVars) {
+        // The model only has parameters for MAX_VARS variables.
+        allVariableTemplates.slice(0, config.maxVars)
       } else {
-        lstmInput1
+        allVariableTemplates
+      }
+      val baseTemplates = actionTemplates ++ variableTemplates
+
+      val entities = input.entityEncoding.entityLinking.getEntitiesWithType(hole.t)
+      val entityTemplates = entities.map(_.template)
+      val entityTokenMatrix = input.entityEncoding.tokenEntityScoreMatrices.getOrElse(hole.t, null)
+
+      val allTemplates = baseTemplates ++ entityTemplates
+
+      // Update the LSTM and use its output to score
+      // the applicable templates.
+      // println("lstm add input")
+      val rnnOutput = builder.addInput(rnnState, prevInput)
+      val rnnOutputDropout = if (dropoutProb > 0.0) {
+        Expression.dropout(rnnOutput, dropoutProb.asInstanceOf[Float])
+      } else {
+        rnnOutput
+      }
+      val nextRnnState = builder.state
+      // println("computing attention")
+      // Compute an attention vector
+      val attentionWeights = Expression.parameter(params(SemanticParserNoPnp.ATTENTION_WEIGHTS_PARAM))
+      val wordAttentions = Expression.transpose(
+        Expression.softmax(input.encodedTokenMatrix * attentionWeights * rnnOutputDropout))
+
+      // Attention vector using the input token vectors
+      // attentionVector = transpose(wordAttentions * input.tokenMatrix)
+      // Attention vector using the encoded tokens
+      val attentionVector = Expression.transpose(wordAttentions * input.encodedTokenMatrix)
+
+      // _ = println("action hidden weights")
+      val actionHiddenWeights = Expression.parameter(params(SemanticParserNoPnp.ACTION_HIDDEN_WEIGHTS))
+      val actionHiddenBias = Expression.parameter(params(SemanticParserNoPnp.ACTION_HIDDEN_BIAS))
+      val actionHiddenWeights2 = Expression.parameter(params(SemanticParserNoPnp.ACTION_HIDDEN_ACTION + hole.t))
+      val actionHiddenBias2 = Expression.parameter(params(SemanticParserNoPnp.ACTION_HIDDEN_ACTION_BIAS + hole.t))
+      val attentionAndRnn = concatenateArray(Array(attentionVector, rnnOutputDropout))
+      val hidden = if (config.actionBias) {
+        (actionHiddenWeights * attentionAndRnn) + actionHiddenBias
+      } else {
+        actionHiddenWeights * attentionAndRnn
       }
 
-      // _ = println("recursing")
-      // Recursively fill in any remaining holes.
-      val (returnState, totalLfScore) = parse(input, builder, lstmInput2, nextRnnState,
-        nextState, nextLfScore, templates, idx + 1)
-      (returnState, totalLfScore)
+      val actionHidden = if (config.relu) {
+        Expression.rectify(hidden)
+      } else {
+        Expression.tanh(hidden)
+      }
+
+      val actionHiddenDropout = if (dropoutProb > 0.0) {
+        Expression.dropout(actionHidden, dropoutProb.asInstanceOf[Float])
+      } else {
+        actionHidden
+      }
+
+      val actionHiddenScores = if (config.actionBias) {
+        (actionHiddenWeights2 * actionHidden) + actionHiddenBias2
+      } else {
+        actionHiddenWeights2 * actionHidden
+      }
+
+      // Score the templates.
+      val actionScores = Expression.pickrange(actionHiddenScores, 0, baseTemplates.length)
+
+      // Score the entity templates
+      // _ = println("scoring entities")
+      val allScores = if (entities.length > 0) {
+        val entityScores = wordAttentions * entityTokenMatrix
+        val entityScoresVector = Expression.transpose(entityScores)
+        concatenateArray(Array(actionScores, entityScoresVector))
+      } else {
+        actionScores
+      }
+
+      // Nondeterministically select which template to update
+      // the parser's state with. The tag for this choice is
+      // its index in the sequence of generated templates, which
+      // can be used to supervise the parser.
+      if (allTemplates.isEmpty) {
+        println("Warning: no actions from hole " + hole)
+      }
+      for {
+        templateTuple <- Pnp.choose(allTemplates.zipWithIndex.toArray, allScores, state)
+        nextState = templateTuple._1.apply(state).addAttention(wordAttentions)
+
+        // Get the LSTM input parameters associated with the chosen
+        // template.
+        actionLookup = lookupParams(SemanticParserNoPnp.ACTION_LOOKUP_PARAM + hole.t)
+        entityLookup = lookupParams(SemanticParserNoPnp.ENTITY_LOOKUP_PARAM + hole.t)
+        index = templateTuple._2
+        actionInput = if (index < baseTemplates.length) {
+          Expression.lookup(actionLookup, templateTuple._2)
+        } else {
+          // TODO: using a single parameter vector for all entities of a given type
+          // seems suboptimal.
+          Expression.lookup(entityLookup, 0)
+        }
+
+        actionLstmInputWeights = Expression.parameter(params(SemanticParserNoPnp.ACTION_LSTM_INPUT_WEIGHTS))
+        actionLstmInputBias = Expression.parameter(params(SemanticParserNoPnp.ACTION_LSTM_INPUT_BIAS))
+        lstmInput1 = concatenateArray(Array(actionInput, attentionVector))
+        lstmInput2 = if (config.actionLstmHiddenLayer) {
+          val hidden = (actionLstmInputWeights * lstmInput1) + actionLstmInputBias
+          if (config.relu) {
+            Expression.rectify(hidden)
+          } else {
+            Expression.tanh(hidden)
+          }
+        } else {
+          lstmInput1
+        }
+
+        // _ = println("recursing")
+        // Recursively fill in any remaining holes.
+        returnState <- parse(input, builder, lstmInput2, nextRnnState, nextState)
+      } yield {
+        returnState
+      }
     }
   }
 

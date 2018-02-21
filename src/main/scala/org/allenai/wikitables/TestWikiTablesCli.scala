@@ -6,7 +6,7 @@ import org.allenai.pnp.Env
 import org.allenai.pnp.PnpInferenceContext
 import org.allenai.pnp.PnpModel
 import org.allenai.pnp.semparse.EntityLinking
-import org.allenai.pnp.semparse.SemanticParser
+import org.allenai.pnp.semparse.SemanticParserNoPnp
 import org.allenai.pnp.semparse.SemanticParserLoss
 import org.allenai.pnp.semparse.SemanticParserState
 import com.jayantkrish.jklol.ccg.lambda.ExpressionParser
@@ -177,10 +177,9 @@ class TestWikiTablesCli extends AbstractCli() {
     answers
   }
 
-  def loadSerializedParser(modelFilename: String): SemanticParser = {
+  def loadSerializedParser(modelFilename: String): SemanticParserNoPnp = {
     val loader = new ModelLoader(modelFilename)
-    val model = PnpModel.load(loader)
-    val parser = SemanticParser.load(loader, model)
+    val parser = SemanticParserNoPnp.load(loader)
     loader.done()
     parser
   }
@@ -197,7 +196,7 @@ object TestWikiTablesCli {
   /** Evaluate the test accuracy of parser on examples. Logical
    * forms are compared for equality using comparator.
    */
-  def test(examples: Seq[WikiTablesExample], parser: SemanticParser, beamSize: Int,
+  def test(examples: Seq[WikiTablesExample], parser: SemanticParserNoPnp, beamSize: Int,
       evaluateDpd: Boolean, evaluateOracle: Boolean, typeDeclaration: TypeDeclaration,
       comparator: ExpressionComparator, preprocessor: LfPreprocessor,
       print: Any => Unit): (SemanticParserLoss, Map[String, List[(Value, Double)]]) = {
@@ -212,12 +211,13 @@ object TestWikiTablesCli {
       print(sent.getWords.asScala.mkString(" "))
       print(sent.getAnnotation("unkedTokens").asInstanceOf[List[String]].mkString(" "))
 
+      ComputationGraph.renew()
       val entityLinking = sent.getAnnotation("entityLinking").asInstanceOf[EntityLinking]
       val dist = parser.parse(sent.getAnnotation("tokenIds").asInstanceOf[Array[Int]],
           entityLinking)
 
-      ComputationGraph.renew()
-      val context = PnpInferenceContext.init(parser.model)
+      val model = PnpModel.init(true)
+      val context = PnpInferenceContext.init(model)
       val results = dist.beamSearch(beamSize, 75, Env.init, context)
 
       val beam = results.executions.slice(0, 10)
@@ -267,14 +267,12 @@ object TestWikiTablesCli {
 
       // Re-parse with a label oracle to find the highest-scoring correct parses.
       if (evaluateOracle) {
-        val oracle = parser.getMultiLabelScore(e.logicalForms, entityLinking, typeDeclaration)
-        if (oracle.isDefined) { 
-          val oracleContext = PnpInferenceContext.init(parser.model).addExecutionScore(oracle.get)
-          val oracleResults = dist.beamSearch(beamSize, 75, Env.init, oracleContext)
-            
-          oracleResults.executions.map { x =>
-            val expression = x.value.decodeExpression
-            print("o " + x.logProb.formatted("%02.3f") + "  " + expression)
+        if (e.logicalForms.nonEmpty) {
+          val results = parser.generateLogProbs(e, typeDeclaration)
+
+          results.foreach { x =>
+            val logProb = ComputationGraph.incrementalForward(x._2).toFloat
+            print("o " + logProb.formatted("%02.3f") + "  " + x._1)
           }
         } else {
           print("  No correct logical forms in oracle.")
