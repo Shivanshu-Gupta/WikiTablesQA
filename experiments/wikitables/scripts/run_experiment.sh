@@ -1,7 +1,7 @@
 #!/bin/bash -e
 
 # NOTE: Uncomment the following line when running on HPC
-#cd /home/cse/dual/cs5130298/Academics/MachineComprehension/WikiTablesQA
+cd /home/cse/dual/cs5130298/Academics/MachineComprehension/WikiTablesQA
 source "experiments/wikitables/scripts/config_miml.sh"
 
 MY_NAME=model_$MODEL_NAME
