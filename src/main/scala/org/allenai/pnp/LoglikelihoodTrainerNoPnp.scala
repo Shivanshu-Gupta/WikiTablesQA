@@ -20,7 +20,7 @@ class LoglikelihoodTrainerNoPnp(val epochs: Int, val sumMultipleExecutions: Bool
     val sortedLosses = exLosses.sortBy(ComputationGraph.incrementalForward(_).toFloat).reverse
     if (k == 1) {
       if (margin == -1) {
-        if (exid.split('_')(1).startsWith("p")) {
+        if (!exid.contains('_') || exid.split('_')(1).startsWith("p")) {
           sortedLosses.head
         } else {
           Expression.log(1 - Expression.exp(sortedLosses.last))
@@ -30,7 +30,7 @@ class LoglikelihoodTrainerNoPnp(val epochs: Int, val sumMultipleExecutions: Bool
       }
     } else {
       if (margin == -1) {
-        if (exid.split('_')(1).startsWith("p")) {
+        if (!exid.contains('_') || exid.split('_')(1).startsWith("p")) {
           val corr = sortedLosses.take(k)
           Expression.logSumExp(new ExpressionVector(corr))
         } else {
@@ -64,57 +64,64 @@ class LoglikelihoodTrainerNoPnp(val epochs: Int, val sumMultipleExecutions: Bool
         typeMap(0)
       }.toList
     }
+    val examples = wikiexamples.filter(_.groupedTemplateSeqs.nonEmpty)
+    println(examples.size +  " training examples after action sequence generation.")
     for (i <- 0 until epochs) {
       var loss = 0.0
       var searchErrors = 0
       log.notifyIterationStart(i)
 
       log.startTimer("pp_loglikelihood")
-      for(wikiexample <- Random.shuffle(wikiexamples)) {
-//        println(wikiexample.id)
-        ComputationGraph.renew( )
-        // Compute the distribution over correct executions.
-        log.startTimer("pp_loglikelihood/forward")
-        val results = parser.generateLogProbs(wikiexample)
-        log.stopTimer("pp_loglikelihood/forward")
+      for(example <- Random.shuffle(examples)) {
+        try {
+          ComputationGraph.renew( )
+          // Compute the distribution over correct executions.
+          log.startTimer("pp_loglikelihood/forward")
+          val results = parser.generateLogProbs(example)
+          log.stopTimer("pp_loglikelihood/forward")
 
-        log.startTimer("pp_loglikelihood/build_exloss")
-        val exLosses = results.map(_._2)
-        //println(exLosses)
-        val logProbExpr = if (exLosses.isEmpty) {
-          Preconditions.checkState(sumMultipleExecutions,
-            "Found %s logical forms (expected exactly 1) for example: %s",
-            exLosses.length.asInstanceOf[AnyRef], wikiexample)
-          null
-        } else if (exLosses.length == 1) {
-          exLosses.head
-        } else {
-          // This flag is used to ensure that training with a
-          // single label per example doesn't work "by accident"
-          // with an execution score that permits multiple labels.
-          Preconditions.checkState(sumMultipleExecutions,
-            "Found %s logical forms (expected exactly 1) for example: %s",
-            exLosses.size.asInstanceOf[AnyRef], wikiexample)
-          if (k == -1) {
-            Expression.logSumExp(new ExpressionVector(exLosses))
+          log.startTimer("pp_loglikelihood/build_exloss")
+          val exLosses = results.map(_._2)
+          val logProbExpr = if (exLosses.isEmpty) {
+            Preconditions.checkState(sumMultipleExecutions,
+              "Found %s logical forms (expected exactly 1) for example: %s",
+              exLosses.length.asInstanceOf[AnyRef], example)
+            null
+          } else if (exLosses.length == 1) {
+            exLosses.head
           } else {
-            getLossExpr(wikiexample.id, exLosses)
+            // This flag is used to ensure that training with a
+            // single label per example doesn't work "by accident"
+            // with an execution score that permits multiple labels.
+            Preconditions.checkState(sumMultipleExecutions,
+              "Found %s logical forms (expected exactly 1) for example: %s",
+              exLosses.size.asInstanceOf[AnyRef], example)
+            if (k == -1) {
+              Expression.logSumExp(new ExpressionVector(exLosses))
+            } else {
+              getLossExpr(example.id, exLosses)
+            }
           }
-        }
-        log.stopTimer("pp_loglikelihood/build_exloss")
-        val lossExpr = -1.0f * logProbExpr
-        if (lossExpr != null) {
-          log.startTimer("pp_loglikelihood/eval_loss")
-          loss += ComputationGraph.incrementalForward(lossExpr).toFloat
-          log.stopTimer("pp_loglikelihood/eval_loss")
+          log.stopTimer("pp_loglikelihood/build_exloss")
+          val lossExpr = -1.0f * logProbExpr
+          if (lossExpr != null) {
+            log.startTimer("pp_loglikelihood/eval_loss")
+            loss += ComputationGraph.incrementalForward(lossExpr).toFloat
+            log.stopTimer("pp_loglikelihood/eval_loss")
 
-          // cg.print_graphviz()
-          log.startTimer("pp_loglikelihood/backward")
-          ComputationGraph.backward(lossExpr)
-          trainer.update(1.0f)
-          log.stopTimer("pp_loglikelihood/backward")
-        } else {
-          searchErrors += 1
+            // cg.print_graphviz()
+            log.startTimer("pp_loglikelihood/backward")
+            ComputationGraph.backward(lossExpr)
+            trainer.update(1.0f)
+            log.stopTimer("pp_loglikelihood/backward")
+          } else {
+            searchErrors += 1
+          }
+        } catch {
+          case e: Throwable =>
+            println(s"Exception with example: ${example.id} with ")
+            e.printStackTrace()
+
         }
       }
       log.stopTimer("pp_loglikelihood")
