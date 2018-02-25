@@ -263,7 +263,7 @@ object WikiTablesUtil {
       saveDatasetToJson(pnpDataset, preprocessedFile)
       pnpDataset
     }
-
+    println(s"Limiting derivations per examples to ${derivationsLimit}")
     // Limit number of derivations if need be
     if (derivationsLimit >= 0 && derivationsLimit < MAX_DERIVATIONS) {
       for {

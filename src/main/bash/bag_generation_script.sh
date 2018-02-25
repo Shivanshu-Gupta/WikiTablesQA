@@ -11,7 +11,7 @@ mv dpd_postpruned_sizes/*.sort dpd_postpruned_sorted/
 cd dpd_postpruned_sorted
 for file in *
 do
-      cat $file >  ${file%.*.*}
+        cat $file > $(basename $file .sort)
 done
 
 rm *.sort

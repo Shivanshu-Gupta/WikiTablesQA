@@ -1,7 +1,6 @@
 package org.allenai.pnp
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ListBuffer
 import com.google.common.base.Preconditions
 import com.jayantkrish.jklol.ccg.lambda.TypeDeclaration
 import com.jayantkrish.jklol.ccg.lambda2.StaticAnalysis
@@ -17,24 +16,26 @@ class LoglikelihoodTrainerNoPnp(val epochs: Int, val sumMultipleExecutions: Bool
                                 val k: Int = -1, val margin: Int = -1) {
 
   def getLossExpr(exid: String, exLosses: Seq[Expression]) = {
-    val sortedLosses = exLosses.sortBy(ComputationGraph.incrementalForward(_).toFloat).reverse
     if (k == 1) {
       if (margin == -1) {
         if (!exid.contains('_') || exid.split('_')(1).startsWith("p")) {
-          sortedLosses.head
+          exLosses.maxBy(ComputationGraph.incrementalForward(_).toFloat)
         } else {
-          Expression.log(1 - Expression.exp(sortedLosses.last))
+          Expression.log(1 - exLosses.minBy(ComputationGraph.incrementalForward(_).toFloat))
         }
       } else {
-        Expression.log(Expression.exp(sortedLosses.head) + 1 - Expression.exp(sortedLosses.last))
+        val max = exLosses.maxBy(ComputationGraph.incrementalForward(_).toFloat)
+        val min = exLosses.minBy(ComputationGraph.incrementalForward(_).toFloat)
+        Expression.log(max + 1 - min)
       }
     } else {
+      val sortedLosses = exLosses.sortBy(ComputationGraph.incrementalForward(_).toFloat).reverse
       if (margin == -1) {
         if (!exid.contains('_') || exid.split('_')(1).startsWith("p")) {
           val corr = sortedLosses.take(k)
           Expression.logSumExp(new ExpressionVector(corr))
         } else {
-          val incorr = sortedLosses.reverse.take(k)
+          val incorr = sortedLosses.takeRight(k)
           Expression.log(k - Expression.sum(new ExpressionVector(incorr.map(Expression.exp))))
         }
       } else {
@@ -45,7 +46,7 @@ class LoglikelihoodTrainerNoPnp(val epochs: Int, val sumMultipleExecutions: Bool
             + k - Expression.sum(new ExpressionVector(incorr.map(Expression.exp))))
         } else {
           val corr = sortedLosses.take(Math.min(k, sortedLosses.length / 2))
-          val incorr = sortedLosses.reverse.take(Math.min(k, sortedLosses.length / 2))
+          val incorr = sortedLosses.takeRight(Math.min(k, sortedLosses.length / 2))
           Expression.log(Expression.sum(new ExpressionVector(corr.map(Expression.exp)))
             + incorr.length - Expression.sum(new ExpressionVector(incorr.map(Expression.exp))))
         }
