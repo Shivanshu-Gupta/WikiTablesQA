@@ -11,9 +11,7 @@ import org.allenai.pnp.semparse.SemanticParserLoss
 import org.allenai.pnp.semparse.SemanticParserState
 import com.jayantkrish.jklol.ccg.lambda.ExpressionParser
 import com.jayantkrish.jklol.ccg.lambda.TypeDeclaration
-import com.jayantkrish.jklol.ccg.lambda2.ExpressionComparator
-import com.jayantkrish.jklol.ccg.lambda2.ExpressionSimplifier
-import com.jayantkrish.jklol.ccg.lambda2.SimplificationComparator
+import com.jayantkrish.jklol.ccg.lambda2._
 import com.jayantkrish.jklol.cli.AbstractCli
 import edu.cmu.dynet._
 import joptsimple.OptionParser
@@ -27,7 +25,6 @@ import java.nio.file.Files
 import java.nio.charset.StandardCharsets
 
 import com.jayantkrish.jklol.util.CountAccumulator
-import com.jayantkrish.jklol.ccg.lambda2.Expression2
 import edu.stanford.nlp.sempre.tables.TableKnowledgeGraph
 import fig.basic.LispTree
 
@@ -267,7 +264,16 @@ object TestWikiTablesCli {
 
       // Re-parse with a label oracle to find the highest-scoring correct parses.
       if (evaluateOracle) {
-        if (e.logicalForms.nonEmpty) {
+        val entityLinking = e.sentence.getAnnotation("entityLinking").asInstanceOf[EntityLinking]
+        e.groupedTemplateSeqs = e.logicalForms.toList.flatMap {lf =>
+          parser.generateActionSequence(lf, entityLinking, typeDeclaration).map(y => (lf, y._2))
+        }.groupBy{lfTemplatePair =>
+          val typeMap = StaticAnalysis.inferTypeMap(lfTemplatePair._1, TypeDeclaration.TOP, typeDeclaration)
+            .asScala.toMap
+          typeMap(0)
+        }.toList
+//        if (e.logicalForms.nonEmpty) {
+        if (e.groupedTemplateSeqs != null && e.groupedTemplateSeqs.nonEmpty) {
           val results = parser.generateLogProbs(e)
 
           results.foreach { x =>
