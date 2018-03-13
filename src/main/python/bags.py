@@ -31,11 +31,12 @@ def writeBags(bagsDir, examplesFile, bagsFile):
             outf.write(bag)
 
 # NOTE: Change this for HPC
-#root = '/scratch/cse/dual/cs5130298/dpd/miml/'
-root = '/analytics/shivanshu/dpd/miml/'
-#for x in ['pos20', 'pos40', 'pn20', 'pn40']:
-for x in ['pos60', 'pos80', 'pos100', 'pn60', 'pn80', 'pn100']:
+root = '/scratch/cse/dual/cs5130298/dpd/miml/'
+#root = '/analytics/shivanshu/dpd/miml/'
+for x in ['pos100', 'pn100']:
+#for x in ['pos60', 'pos80', 'pos100', 'pn60', 'pn80', 'pn100']:
     dpdDir = root + 'dpd_postpruned_' +  x + '/'
     print(dpdDir)
-    for exFile in ['random-split-1-train-100', 'random-split-1-train-500', 'random-split-1-train-1000', 'random-split-1-train-all']:
+    for exFile in ['random-split-1-train-100', 'random-split-1-train-500', 'random-split-1-train-1000', 'random-split-1-train-3000', 'random-split-1-train-all']:
+        print(exFile)
         writeBags(dpdDir, root + exFile + '.examples', dpdDir + exFile + '-bags.examples')
