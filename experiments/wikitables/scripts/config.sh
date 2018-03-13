@@ -21,9 +21,9 @@ TRAIN_DEV="$EXPERIMENT_DIR/../../../examples/random-split-$FOLD-dev.examples"
 # Development data for evaluating the final trained model.
 #DEV="$EXPERIMENT_DIR/../../../examples/random-split-$FOLD-dev-100.examples"
 # Uncomment below to use the full dev set.
-DEV="$EXPERIMENT_DIR/../../../examples/random-split-$FOLD-dev.examples"
+#DEV="$EXPERIMENT_DIR/../../../examples/random-split-$FOLD-dev.examples"
 # Uncomment below to use the test set.
-# DEV="$EXPERIMENT_DIR/pristine-unseen-tables.examples"
+DEV="$EXPERIMENT_DIR/../../../examples/pristine-unseen-tables.examples"
 
 # Location of DPD output
 DERIVATIONS_PATH="$EXPERIMENT_DIR/../dpd_output/"

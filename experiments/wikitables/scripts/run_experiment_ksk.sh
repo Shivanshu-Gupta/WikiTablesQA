@@ -8,16 +8,18 @@
 #MARGIN=${allM[$EXP_ID]}
 #echo "Beam=$BEAM_SIZE K=$K Margin=$MARGIN"
 
+allK=(-1   1    2   3   5   7   10)
+K=${allK[$EXP_ID]}
 echo "K=$K"
-echo "D=$D"
 EXP_NAME=K${K}
 
 # NOTE: Uncomment the following line when running on HPC
 cd /home/cse/dual/cs5130298/Academics/MachineComprehension/WikiTablesQA
 source "experiments/wikitables/scripts/config.sh"
-MAX_TRAINING_DERIVATIONS=$D
 
-MY_NAME=model_${TRAIN_SIZE}_D${D}
+TRAIN_DEV="$EXPERIMENT_DIR/../../../examples/random-split-1-dev-100.examples"
+
+MY_NAME=model_${TRAIN_SIZE}_${MODEL_NAME}
 MY_DIR=$EXPERIMENT_DIR/$MY_NAME/
 MY_MODEL=$MY_DIR/parser_final.ser
 MODEL_DIR=$MY_DIR/models/

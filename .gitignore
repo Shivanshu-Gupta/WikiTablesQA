@@ -51,3 +51,4 @@ parallel_logs_prepruned/
 *.sh.e*
 logs/
 script.sh
+miml
