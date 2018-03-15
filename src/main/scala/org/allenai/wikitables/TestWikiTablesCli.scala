@@ -274,7 +274,12 @@ object TestWikiTablesCli {
             
           oracleResults.executions.map { x =>
             val expression = x.value.decodeExpression
-            print("o " + x.logProb.formatted("%02.3f") + "  " + expression)
+          
+            if(e.goldLogicalForm.isDefined && expression == e.goldLogicalForm.get) {
+              print("o " + x.logProb.formatted("%02.3f") + " [GOLD] " + expression)
+            } else {
+              print("o " + x.logProb.formatted("%02.3f") + "  " + expression)
+            }
           }
         } else {
           print("  No correct logical forms in oracle.")
