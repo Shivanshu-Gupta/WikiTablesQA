@@ -33,7 +33,7 @@ class SemanticParserLogFunction(modelDir: Option[String], bestModel: Option[Stri
     val curDropout = parser.dropoutProb
     parser.dropoutProb = -1
 
-    // TODO: Implement This
+    println("evaluating accuracy")
     val (loss, denotations) = TestWikiTablesCli.test(examples, parser, devBeam, false, false,
         typeDeclaration, comparator, preprocessor, (x:Any) => ())
 
