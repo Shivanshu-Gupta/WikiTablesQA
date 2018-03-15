@@ -10,7 +10,7 @@ import org.allenai.pnp.{CompGraph, Env, Pnp}
 import org.allenai.pnp.ExecutionScore.ExecutionScore
 import org.allenai.wikitables.WikiTablesExample
 //import org.allenai.pnp.Pnp
-//import org.allenai.pnp.PnpModel
+import org.allenai.pnp.PnpModel
 import org.allenai.pnp.util.Trie
 import org.allenai.wikitables.SemanticParserFeatureGenerator
 import com.google.common.base.Preconditions
@@ -343,10 +343,10 @@ class SemanticParserNoPnp(val actionSpace: ActionSpace, val vocab: IndexedList[S
     // final output of the LSTM.
     val rootWeights = Expression.parameter(params(SemanticParserNoPnp.ROOT_WEIGHTS_PARAM))
     val rootBias = Expression.parameter(params(SemanticParserNoPnp.ROOT_BIAS_PARAM))
-    val rootScores = Expression.logSoftmax((rootWeights * input.sentEmbedding) + rootBias)
+    val rootScores = (rootWeights * input.sentEmbedding) + rootBias
     for {
       (rootType, lfTemplateSeqs) <- wikiexample.groupedTemplateSeqs
-      rootScore = Expression.pick(rootScores, actionSpace.rootTypes.indexOf(rootType))
+      rootScore = Expression.pick(Expression.logSoftmax(rootScores), actionSpace.rootTypes.indexOf(rootType))
       state = SemanticParserState.start()
       (expr, logProb) <- parse(input, actionBuilder, state.addRootType(rootType), rootScore, lfTemplateSeqs.map(_._2))
     } yield {
@@ -526,10 +526,11 @@ class SemanticParserNoPnp(val actionSpace: ActionSpace, val vocab: IndexedList[S
     // final output of the LSTM.
     val rootWeights = Expression.parameter(params(SemanticParserNoPnp.ROOT_WEIGHTS_PARAM))
     val rootBias = Expression.parameter(params(SemanticParserNoPnp.ROOT_BIAS_PARAM))
-    val rootScores = Expression.logSoftmax((rootWeights * input.sentEmbedding) + rootBias)
+    val rootScores = (rootWeights * input.sentEmbedding) + rootBias
+    val probs = ComputationGraph.incrementalForward(Expression.softmax(rootScores)).toSeq
     for {
       // Encode input tokens using an LSTM.
-      rootType <- Pnp.choose(actionSpace.rootTypes, rootScores, state)
+      rootType <- Pnp.choose(actionSpace.rootTypes, probs.map(_.asInstanceOf[Double]))
 
       // _ = println("parsing 2")
       // Recursively generate a logical form using an LSTM to
@@ -651,6 +652,7 @@ class SemanticParserNoPnp(val actionSpace: ActionSpace, val vocab: IndexedList[S
       } else {
         actionScores
       }
+      val probs = ComputationGraph.incrementalForward(Expression.softmax(allScores)).toSeq
 
       // Nondeterministically select which template to update
       // the parser's state with. The tag for this choice is
@@ -660,7 +662,7 @@ class SemanticParserNoPnp(val actionSpace: ActionSpace, val vocab: IndexedList[S
         println("Warning: no actions from hole " + hole)
       }
       for {
-        templateTuple <- Pnp.choose(allTemplates.zipWithIndex.toArray, allScores, state)
+        templateTuple <- Pnp.choose(allTemplates.zipWithIndex, probs.map(_.asInstanceOf[Double]))
         nextState = templateTuple._1.apply(state).addAttention(wordAttentions)
 
         // Get the LSTM input parameters associated with the chosen
