@@ -1,7 +1,8 @@
-experiments = [(K, D) for K in [-1, 15, 5, 7, 10] for D in [50, 100, 150, 200]]
+FOLD=5
+experiments = [(K, D) for K in [-1, 15, 5, 7, 10] for D in [100]]
 with open('script.sh', 'w') as scriptf:
-    for i, (K, D) in enumerate(experiments):
-        scriptf.write(("qsub -P cse -N orig_all_{0} -e logs/orig_all_{0}.err -o logs/orig_all_{0}.out "
-                    + "-lselect=1:highmem=1 -lwalltime=48:00:00 -V -v EXP_TYPE=orig,TRAIN_SIZE=all,K={1},D={2} "
-                    + "./experiments/wikitables/scripts/run_experiment.sh\n\n").format(i, K, D))
+    for K, D in experiments:
+        scriptf.write(("qsub -P cse -N K{0}_D{1}_{2} -e logs/K{0}_D{1}_{2}.err -o logs/K{0}_D{1}_{2}.out "
+                + "-lselect=1:ncpus=8:mem=60g -lwalltime=25:00:00 -V -v EXP_TYPE=orig,TRAIN_SIZE=all,FOLD={2},K={0},D={1} "
+                    + "./experiments/wikitables/scripts/run_experiment.sh\n\n").format(K, D, FOLD))
 
