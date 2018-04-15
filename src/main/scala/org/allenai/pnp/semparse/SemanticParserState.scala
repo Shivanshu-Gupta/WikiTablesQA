@@ -14,10 +14,10 @@ import edu.cmu.dynet.Expression
   * are stored in a list that tracks which portions of the
   * expression have yet to be generated.
   */
-case class SemanticParserState(val parts: Map[Int, ExpressionPart],
-    val unfilledHoleIds: List[Hole], val nextId: Int,
-    val numActions: Int, val rootType: Type,
-    val templates: List[Template], val attentions: List[Expression]) {
+case class SemanticParserState(parts: Map[Int, ExpressionPart], unfilledHoleIds: List[Hole], nextId: Int,
+                               numActions: Int, rootType: Type, templates: List[Template], attentions: List[Expression],
+                               baseTemplates: List[Vector[Template]], actionScores: List[Expression],
+                               entityTemplates: List[Vector[Template]], entityScores: List[Expression]) {
 
   def decodeExpression(partId: Int): Expression2 = {
     val part = parts(partId)
@@ -39,7 +39,20 @@ case class SemanticParserState(val parts: Map[Int, ExpressionPart],
   
   def addAttention(e: Expression): SemanticParserState = {
     SemanticParserState(parts, unfilledHoleIds, nextId, numActions,
-        rootType, templates, e :: attentions)
+        rootType, templates, e :: attentions, baseTemplates, actionScores,
+        entityTemplates, entityScores)
+  }
+
+  def addActionScores(v: Vector[Template], e: Expression): SemanticParserState = {
+    SemanticParserState(parts, unfilledHoleIds, nextId, numActions,
+      rootType, templates, attentions, v :: baseTemplates, e :: actionScores,
+      entityTemplates, entityScores)
+  }
+
+  def addEntityScores(v: Vector[Template], e: Expression): SemanticParserState = {
+    SemanticParserState(parts, unfilledHoleIds, nextId, numActions,
+      rootType, templates, attentions, baseTemplates, actionScores,
+      v :: entityTemplates, e :: entityScores)
   }
   
   def getTemplates: Array[Template] = {
@@ -48,6 +61,22 @@ case class SemanticParserState(val parts: Map[Int, ExpressionPart],
   
   def getAttentions: Array[Expression] = {
     attentions.reverse.toArray
+  }
+
+  def getBaseTemplates: Array[Vector[Template]] = {
+    baseTemplates.reverse.toArray
+  }
+
+  def getActionScores: Array[Expression] = {
+    actionScores.reverse.toArray
+  }
+
+  def getEntityTemplates: Array[Vector[Template]] = {
+    entityTemplates.reverse.toArray
+  }
+
+  def getEntityScores: Array[Expression] = {
+    entityScores.reverse.toArray
   }
   
   def nextHole(): Option[Hole] = {
@@ -70,13 +99,15 @@ case class SemanticParserState(val parts: Map[Int, ExpressionPart],
     val nextHoles = newHoles ++ unfilledHoles
     
     SemanticParserState(parts + partTuple, nextHoles, nextId + newHoles.length,
-        numActions + 1, rootType, template :: templates, attentions)
+      numActions + 1, rootType, template :: templates, attentions, baseTemplates,
+      actionScores, entityTemplates, entityScores)
   }
 
   def drop(hole: Hole, template: Template): SemanticParserState = {
     Preconditions.checkArgument(unfilledHoleIds(0).id == hole.id)
-    SemanticParserState(parts, unfilledHoleIds.drop(1), nextId,
-        numActions + 1, rootType, template :: templates, attentions)
+    SemanticParserState(parts, unfilledHoleIds.drop(1), nextId, numActions + 1,
+      rootType, template :: templates, attentions, baseTemplates, actionScores,
+      entityTemplates, entityScores)
   }
 
   def hasRootType: Boolean = {
@@ -88,7 +119,7 @@ case class SemanticParserState(val parts: Map[Int, ExpressionPart],
         "The root type can only be added at the beginning of parsing".asInstanceOf[AnyRef])
     
     val scope = Scope(List.empty)
-    SemanticParserState(parts, List(Hole(0, rootType, scope, false)), 1, 0, rootType, List(), List())
+    SemanticParserState(parts, List(Hole(0, rootType, scope, false)), 1, 0, rootType, List(), List(), List(), List(), List(), List())
   }
 }
 
@@ -99,7 +130,7 @@ object SemanticParserState {
     * applying a sequence of templates.  
     */
   def start(): SemanticParserState = {
-    SemanticParserState(Map.empty, List(), 1, 0, null, List(), List())
+    SemanticParserState(Map.empty, List(), 1, 0, null, List(), List(), List(), List(), List(), List())
   }
 }
 

@@ -289,6 +289,7 @@ object TestWikiTablesCli {
       // Print the attentions of the best predicted derivation
       if (beam.nonEmpty) {
         printAttentions(beam(0).value, e.sentence.getWords.asScala.toArray, print)
+        printTemplateScores(beam(0).value, print)
       }
       
       printEntityTokenFeatures(entityLinking, e.sentence.getWords.asScala.toArray, print)
@@ -320,6 +321,18 @@ object TestWikiTablesCli {
       }
 
       print("  " + tokenStrings.mkString(" ") + " " + templates(i))
+    }
+  }
+
+  def printTemplateScores(state: SemanticParserState, print: Any => Unit): Unit = {
+    val baseTemplatesArray = state.getBaseTemplates
+    val actionScoresArray = state.getActionScores.map(ComputationGraph.incrementalForward(_).toSeq())
+    val entityTemplatesArray = state.getEntityTemplates
+    val entityScoresArray = state.getEntityScores.map(ComputationGraph.incrementalForward(_).toSeq())
+    val temp = baseTemplatesArray zip actionScoresArray zip entityTemplatesArray zip entityScoresArray
+    for((((baseTemplates, actionScores), entityTemplates), entityScores) <- temp) {
+      print((baseTemplates zip actionScores).sortBy(_._2).take(5).mkString(" "))
+      print((entityTemplates zip entityScores).sortBy(_._2).take(5).mkString(" "))
     }
   }
   

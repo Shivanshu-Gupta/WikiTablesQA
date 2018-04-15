@@ -485,10 +485,13 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
 
         // Score the entity templates
         // _ = println("scoring entities")
-        allScores = if (entities.size > 0) {
-          val entityScores = wordAttentions * entityTokenMatrix
-          val entityScoresVector = Expression.transpose(entityScores)
-          concatenateArray(Array(actionScores, entityScoresVector))
+        entityScores = if (entities.size > 0) {
+          Expression.transpose(wordAttentions * entityTokenMatrix)
+        } else {
+          null
+        }
+        allScores = if (entityScores != null) {
+          concatenateArray(Array(actionScores, entityScores))
         } else {
           actionScores
         }
@@ -505,6 +508,7 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
 
         templateTuple <- Pnp.choose(allTemplates.zipWithIndex.toArray, allScores, state)
         nextState = templateTuple._1.apply(state).addAttention(wordAttentions)
+              .addActionScores(baseTemplates, actionScores).addEntityScores(entityTemplates.toVector, entityScores)
 
         // Get the LSTM input parameters associated with the chosen
         // template.
