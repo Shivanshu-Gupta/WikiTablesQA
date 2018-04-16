@@ -359,14 +359,15 @@ object TestWikiTablesCli {
     val baseTemplatesArray = state.getBaseTemplates
     val actionScoresArray = state.getActionScores.map(ComputationGraph.incrementalForward(_).toSeq())
     val entityTemplatesArray = state.getEntityTemplates
-    val entityScoresArray = state.getEntityScores.map(ComputationGraph.incrementalForward(_).toSeq())
+    val entityScoresArray = state.getEntityScores.map(x => if(x != null) ComputationGraph.incrementalForward(x).toSeq() else Seq())
     val temp = baseTemplatesArray zip actionScoresArray zip entityTemplatesArray zip entityScoresArray
     for((((baseTemplates, actionScores), entityTemplates), entityScores) <- temp) {
-      print((baseTemplates zip actionScores).sortBy(_._2).take(5).mkString(" "))
-      print((entityTemplates zip entityScores).sortBy(_._2).take(5).mkString(" "))
+      print("[BASE] " + (baseTemplates zip actionScores).sortBy(-_._2).take(5).mkString(" "))
+      if(entityTemplates.nonEmpty)
+        print("[ENTITY] " + (entityTemplates zip entityScores).sortBy(-_._2).take(5).mkString(" "))
     }
   }
-  
+   
   def printEntityTokenFeatures(entityLinking: EntityLinking, tokens: Array[String],
       print: Any => Unit): Unit = {
     for ((entity, features) <- entityLinking.entities.zip(entityLinking.entityTokenFeatures)) {
