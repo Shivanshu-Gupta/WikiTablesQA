@@ -87,6 +87,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   var concatLstmForDecoderOpt: OptionSpec[Void] = null
   var maxPoolEntityTokenSimilaritiesOpt: OptionSpec[Void] = null
   var entityLinkingMlpOpt: OptionSpec[Void] = null
+  var coverageOpt: OptionSpec[Void] = null
+  var templateTypeProbOpt: OptionSpec[Void] = null
 
   var skipActionSpaceValidationOpt: OptionSpec[Void] = null
   var trainOnAnnotatedLfsOpt: OptionSpec[Void] = null
@@ -132,6 +134,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     concatLstmForDecoderOpt = parser.accepts("concatLstmForDecoder")
     maxPoolEntityTokenSimilaritiesOpt = parser.accepts("maxPoolEntityTokenSimilarities")
     entityLinkingMlpOpt = parser.accepts("entityLinkingMlp")
+    coverageOpt = parser.accepts("coverage")
+    templateTypeProbOpt = parser.accepts("entityTemplateProb")
 
     skipActionSpaceValidationOpt = parser.accepts("skipActionSpaceValidation")
     trainOnAnnotatedLfsOpt = parser.accepts("trainOnAnnotatedLfs")
@@ -265,6 +269,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     config.concatLstmForDecoder = options.has(concatLstmForDecoderOpt)
     config.maxPoolEntityTokenSimiliarities = options.has(maxPoolEntityTokenSimilaritiesOpt)
     config.featureMlp = options.has(entityLinkingMlpOpt)
+    config.coverage = options.has(coverageOpt)
+    config.templateTypeProb = options.has(templateTypeProbOpt)
     config.preprocessor = lfPreprocessor
     config.typeDeclaration = typeDeclaration
     val parser = SemanticParser.create(actionSpace, vocab, wordEmbeddings, config, model)
