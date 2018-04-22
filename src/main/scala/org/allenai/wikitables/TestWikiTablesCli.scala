@@ -289,7 +289,7 @@ object TestWikiTablesCli {
       // Print the attentions of the best predicted derivation
       if (beam.nonEmpty) {
         printAttentions(beam(0).value, e.sentence.getWords.asScala.toArray, print)
-        printTemplateScores(beam(0).value, print)
+//        printTemplateScores(beam(0).value, print)
       }
       
       printEntityTokenFeatures(entityLinking, e.sentence.getWords.asScala.toArray, print)
@@ -302,9 +302,15 @@ object TestWikiTablesCli {
   def printAttentions(state: SemanticParserState, tokens: Array[String],
       print: Any => Unit): Unit = {
     val templates = state.getTemplates
-    val attentions = state.getAttentions
-    for (i <- 0 until templates.length) {
-      val values = ComputationGraph.incrementalForward(attentions(i)).toSeq()
+    val attentions = state.getAttentions.map(ComputationGraph.incrementalForward(_).toSeq())
+    val baseTemplatesArray = state.getBaseTemplates
+    val actionScoresArray = state.getActionScores.map(ComputationGraph.incrementalForward(_).toSeq())
+    val entityTemplatesArray = state.getEntityTemplates
+    val entityScoresArray = state.getEntityScores.map(x => if(x != null) ComputationGraph.incrementalForward(x).toSeq() else Seq())
+    val temp = templates zip attentions zip baseTemplatesArray zip actionScoresArray zip entityTemplatesArray zip entityScoresArray
+    for(((((((template), attention), baseTemplates), actionScores), entityTemplates), entityScores) <- temp) {
+//      val values = ComputationGraph.incrementalForward(attention).toSeq()
+      val values = attention
       val maxIndex = values.zipWithIndex.max._2
 
       val tokenStrings = for {
@@ -320,7 +326,10 @@ object TestWikiTablesCli {
         color + tokens(j) + Console.RESET
       }
 
-      print("  " + tokenStrings.mkString(" ") + " " + templates(i))
+      print("  " + tokenStrings.mkString(" ") + " " + template)
+      print("[BASE] " + (baseTemplates zip actionScores).sortBy(-_._2).take(5).mkString(" "))
+      if(entityTemplates.nonEmpty)
+        print("[ENTITY] " + (entityTemplates zip entityScores).sortBy(-_._2).take(5).mkString(" "))
     }
   }
 
