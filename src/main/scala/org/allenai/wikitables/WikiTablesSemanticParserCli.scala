@@ -133,7 +133,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     maxPoolEntityTokenSimilaritiesOpt = parser.accepts("maxPoolEntityTokenSimilarities")
     entityLinkingMlpOpt = parser.accepts("entityLinkingMlp")
     coverageOpt = parser.accepts("coverage")
-    templateTypeProbOpt = parser.accepts("entityTemplateProb")
+    templateTypeProbOpt = parser.accepts("templateTypeProb")
 
     skipActionSpaceValidationOpt = parser.accepts("skipActionSpaceValidation")
     trainOnAnnotatedLfsOpt = parser.accepts("trainOnAnnotatedLfs")
@@ -204,7 +204,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   }
 
   override def run(options: OptionSet): Unit = {
-    Initialize.initialize(Map("dynet-mem" -> "4096"))
+    Initialize.initialize(Map("dynet-mem" -> "2048"))
 
     val typeDeclaration = if (options.has(seq2TreeOpt)) {
       new Seq2TreeTypeDeclaration()
