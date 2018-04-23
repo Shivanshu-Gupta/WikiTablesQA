@@ -17,7 +17,8 @@ TRAIN_DEV="data/WikiTableQuestions/data/subsamples/random-split-$FOLD-dev-100.ex
 # TRAIN_DEV="data/WikiTableQuestions/data/random-split-$FOLD-dev.examples"
 
 # Development data for evaluating the final trained model.
-DEV="data/WikiTableQuestions/data/subsamples/random-split-$FOLD-dev-100.examples"
+#DEV="data/WikiTableQuestions/data/subsamples/random-split-$FOLD-dev-100.examples"
+DEV="data/WikiTableQuestions/data/analysis.examples"
 # Uncomment below to use the full dev set.
 # DEV="data/WikiTableQuestions/data/random-split-$FOLD-dev.examples"
 # Uncomment below to use the test set.
