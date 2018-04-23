@@ -2,7 +2,7 @@
 
 source "experiments/wikitables/scripts/config.sh"
 
-MY_NAME="base-postpruned"
+MY_NAME="nocoverage-notemplateTypeProb"
 MY_DIR=$EXPERIMENT_DIR/$MY_NAME/
 MY_MODEL=$MY_DIR/parser_final.ser
 MODEL_DIR=$MY_DIR/models/
