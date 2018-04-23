@@ -135,7 +135,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     maxPoolEntityTokenSimilaritiesOpt = parser.accepts("maxPoolEntityTokenSimilarities")
     entityLinkingMlpOpt = parser.accepts("entityLinkingMlp")
     coverageOpt = parser.accepts("coverage")
-    templateTypeProbOpt = parser.accepts("entityTemplateProb")
+    templateTypeProbOpt = parser.accepts("templateTypeProb")
 
     skipActionSpaceValidationOpt = parser.accepts("skipActionSpaceValidation")
     trainOnAnnotatedLfsOpt = parser.accepts("trainOnAnnotatedLfs")
