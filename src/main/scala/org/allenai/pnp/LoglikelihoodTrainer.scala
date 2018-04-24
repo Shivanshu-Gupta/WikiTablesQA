@@ -2,11 +2,11 @@ package org.allenai.pnp
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
-
 import com.google.common.base.Preconditions
 import com.jayantkrish.jklol.training.LogFunction
-
 import edu.cmu.dynet._
+import org.allenai.wikitables.WikiTablesExample
+
 import scala.util.Random
 
 class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleExecutions: Boolean,
@@ -14,16 +14,16 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
 
   Preconditions.checkArgument(model.locallyNormalized == true)
 
-  def train[A](examples: Seq[PnpExample[A]]): Unit = {
+  def train[A](examples: Seq[PnpExample[A]], wikiexamples: Seq[WikiTablesExample] = null): Unit = {
     for (i <- 0 until epochs) {
       var loss = 0.0
       var searchErrors = 0
       log.notifyIterationStart(i)
 
       log.startTimer("pp_loglikelihood")
-      for (example <- Random.shuffle(examples)) {
+      for ((example, wikiexample) <- Random.shuffle(examples zip wikiexamples)) {
         ComputationGraph.renew()
-
+//        println(wikiexample.id)
         val env = example.env
         val context = PnpInferenceContext.init(model).setLog(log)
 
@@ -35,7 +35,7 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
         
         log.startTimer("pp_loglikelihood/build_loss")
         val exLosses = conditional.executions.map(_.env.getScore)
-
+//        println(exLosses.length)
         val logProbExpr = if (exLosses.length == 0) {
           Preconditions.checkState(sumMultipleExecutions,
             "Found %s conditional executions (expected exactly 1) for example: %s",
