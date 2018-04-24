@@ -491,7 +491,31 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
         // Attention vector using the encoded tokens
         attentionVector = Expression.transpose(wordAttentions * input.encodedTokenMatrix)
         attentionAndRnn = concatenateArray(Array(attentionVector, rnnOutputDropout))
-        actionScores <- getActionScores(hole, attentionAndRnn, baseTemplates)
+        actionHiddenWeights <- Pnp.param(SemanticParser.ACTION_HIDDEN_WEIGHTS)
+        actionHiddenBias <- Pnp.param(SemanticParser.ACTION_HIDDEN_BIAS)
+        actionHiddenWeights2 <- Pnp.param(SemanticParser.ACTION_HIDDEN_ACTION + hole.t)
+        actionHiddenBias2 <- Pnp.param(SemanticParser.ACTION_HIDDEN_ACTION_BIAS + hole.t)
+        hidden = if (config.actionBias) {
+          (actionHiddenWeights * attentionAndRnn) + actionHiddenBias
+        } else {
+          (actionHiddenWeights * attentionAndRnn)
+        }
+        actionHidden = if (config.relu) {
+          Expression.rectify(hidden)
+        } else {
+          Expression.tanh(hidden)
+        }
+        actionHiddenDropout = if (dropoutProb > 0.0) {
+          Expression.dropout(actionHidden, dropoutProb.asInstanceOf[Float])
+        } else {
+          actionHidden
+        }
+        actionHiddenScores = if (config.actionBias) {
+          (actionHiddenWeights2 * actionHidden) + actionHiddenBias2
+        } else {
+          actionHiddenWeights2 * actionHidden
+        }
+        actionScores =  Expression.pickrange(actionHiddenScores, 0, baseTemplates.length)
         // Score the entity templates
         entityScores = if (entities.nonEmpty) {
           Expression.transpose(wordAttentions * entityTokenMatrix)
@@ -499,35 +523,54 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
           null
         }
         cg <- Pnp.computationGraph()
-        allScores = if(entityScores == null) {
-          actionScores
-        } else if (config.templateTypeSelection == "probability") {
+        templatesWithScores <- if(entityScores == null) {
+          Pnp.choose(Seq((baseTemplates, actionScores)), Seq(1.0))
+        } else if(config.templateTypeSelection == "probability") {
+          val templateScorePairs = Array((baseTemplates, actionScores), (entityTemplates.toVector, entityScores))
           val templateTypeProbWeights = Expression.parameter(cg.getParameter(SemanticParser.TEMPLATE_TYPE_PROB_WEIGHTS))
           val templateTypeProbBias = Expression.parameter(cg.getParameter(SemanticParser.TEMPLATE_TYPE_PROB_BIAS))
-          val actionTemplateProb = Expression.logistic (Expression.dotProduct (templateTypeProbWeights, attentionAndRnn)
-            + templateTypeProbBias)
-          val condActionScores = actionTemplateProb * actionScores
-          val condEntityScores = (1 - actionTemplateProb) * entityScores
-          concatenateArray (Array (condActionScores, condEntityScores))
-        } else if (config.templateTypeSelection == "multiplier") {
-          val entityTemplateScoreMultiplier = Expression.parameter(cg.getParameter(SemanticParser.ENTITY_TEMPLATE_SCORE_MULTIPLIER))
-          val scaledEntityScores = entityTemplateScoreMultiplier * entityScores
-          concatenateArray (Array (actionScores, entityScores))
+          val actionTemplateProb = Expression.logistic (Expression.dotProduct (templateTypeProbWeights, attentionAndRnn) + templateTypeProbBias)
+          val distribution = Expression.concatenate(actionTemplateProb, 1 - actionTemplateProb)
+          Pnp.choose(templateScorePairs, distribution)
         } else {
-          concatenateArray (Array (actionScores, entityScores))
+          val allScores = if (config.templateTypeSelection == "multiplier") {
+            val entityTemplateScoreMultiplier = Expression.parameter (cg.getParameter (SemanticParser.ENTITY_TEMPLATE_SCORE_MULTIPLIER))
+            Expression
+            val scaledEntityScores = entityScores * entityTemplateScoreMultiplier
+            concatenateArray(Array(actionScores, scaledEntityScores))
+          } else {
+            concatenateArray(Array(actionScores, entityScores))
+          }
+          Pnp.choose(Seq((allTemplates, allScores)), Seq(1.0))
         }
+//        allScores = if(entityScores == null) {
+//          actionScores
+//        } else if (config.templateTypeSelection == "probability") {
+//          val templateTypeProbWeights = Expression.parameter(cg.getParameter(SemanticParser.TEMPLATE_TYPE_PROB_WEIGHTS))
+//          val templateTypeProbBias = Expression.parameter(cg.getParameter(SemanticParser.TEMPLATE_TYPE_PROB_BIAS))
+//          val actionTemplateProb = Expression.logistic (Expression.dotProduct (templateTypeProbWeights, attentionAndRnn)
+//            + templateTypeProbBias)
+//          val condActionScores = actionTemplateProb * actionScores
+//          val condEntityScores = (1 - actionTemplateProb) * entityScores
+//          concatenateArray (Array (condActionScores, condEntityScores))
+//        } else if (config.templateTypeSelection == "multiplier") {
+//          val entityTemplateScoreMultiplier = Expression.parameter(cg.getParameter(SemanticParser.ENTITY_TEMPLATE_SCORE_MULTIPLIER))
+//          val scaledEntityScores = entityTemplateScoreMultiplier * entityScores
+//          concatenateArray (Array (actionScores, scaledEntityScores))
+//        } else {
+//          concatenateArray (Array (actionScores, entityScores))
+//        }
 
         // Nondeterministically select which template to update
         // the parser's state with. The tag for this choice is
         // its index in the sequence of generated templates, which
         // can be used to supervise the parser.
-        _ = if (allTemplates.isEmpty) {
+        _ = if (templatesWithScores._1.isEmpty) {
           println("Warning: no actions from hole " + hole)
         } else {
           ()
         }
-
-        templateTuple <- Pnp.choose(allTemplates.zipWithIndex.toArray, allScores, state)
+        templateTuple <- Pnp.choose(templatesWithScores._1.zipWithIndex.toArray, templatesWithScores._2, state)
         nextState = templateTuple._1.apply(state).addAttention(wordAttentions)
               .addActionScores(baseTemplates, actionScores).addEntityScores(entityTemplates.toVector, entityScores)
 
@@ -897,7 +940,7 @@ object SemanticParser {
       model.addParameter(TEMPLATE_TYPE_PROB_WEIGHTS, Dim(2 * config.hiddenDim + actionLstmHiddenDim))
       model.addParameter(TEMPLATE_TYPE_PROB_BIAS, Dim(1))
     } else if(config.templateTypeSelection == "multiplier") {
-      model.addParameter(ENTITY_TEMPLATE_SCORE_MULTIPLIER, Dim(1))
+      model.addParameter(ENTITY_TEMPLATE_SCORE_MULTIPLIER, Dim(1, 1))
     }
 
     model.addParameter(ACTION_HIDDEN_WEIGHTS, Dim(config.actionHiddenDim,

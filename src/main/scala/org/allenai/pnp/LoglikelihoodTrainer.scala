@@ -36,7 +36,7 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
         log.startTimer("pp_loglikelihood/build_loss")
         val exLosses = conditional.executions.map(_.env.getScore)
 //        println(exLosses.length)
-        val logProbExpr = if (exLosses.length == 0) {
+        val logProbExpr = if (exLosses.isEmpty) {
           Preconditions.checkState(sumMultipleExecutions,
             "Found %s conditional executions (expected exactly 1) for example: %s",
             conditional.executions.size.asInstanceOf[AnyRef], example)
