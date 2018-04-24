@@ -88,7 +88,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   var maxPoolEntityTokenSimilaritiesOpt: OptionSpec[Void] = null
   var entityLinkingMlpOpt: OptionSpec[Void] = null
   var coverageOpt: OptionSpec[Void] = null
-  var templateTypeProbOpt: OptionSpec[Void] = null
+  var templateTypeSelectionOpt: OptionSpec[String] = null
 
   var skipActionSpaceValidationOpt: OptionSpec[Void] = null
   var trainOnAnnotatedLfsOpt: OptionSpec[Void] = null
@@ -135,7 +135,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     maxPoolEntityTokenSimilaritiesOpt = parser.accepts("maxPoolEntityTokenSimilarities")
     entityLinkingMlpOpt = parser.accepts("entityLinkingMlp")
     coverageOpt = parser.accepts("coverage")
-    templateTypeProbOpt = parser.accepts("templateTypeProb")
+    templateTypeSelectionOpt = parser.accepts("templateTypeSelection").withRequiredArg().ofType(classOf[String]).defaultsTo("")
 
     skipActionSpaceValidationOpt = parser.accepts("skipActionSpaceValidation")
     trainOnAnnotatedLfsOpt = parser.accepts("trainOnAnnotatedLfs")
@@ -270,7 +270,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     config.maxPoolEntityTokenSimiliarities = options.has(maxPoolEntityTokenSimilaritiesOpt)
     config.featureMlp = options.has(entityLinkingMlpOpt)
     config.coverage = options.has(coverageOpt)
-    config.templateTypeProb = options.has(templateTypeProbOpt)
+    config.templateTypeSelection = options.valueOf(templateTypeSelectionOpt)
     config.preprocessor = lfPreprocessor
     config.typeDeclaration = typeDeclaration
     val parser = SemanticParser.create(actionSpace, vocab, wordEmbeddings, config, model)
@@ -365,7 +365,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
       model.locallyNormalized = true
       val trainer = new LoglikelihoodTrainer(epochs, beamSize, true, model, sgd,
           logFunction)
-      trainer.train(pnpExamples.toList)
+      trainer.train(pnpExamples.toList, trainingExamples)
     }
     parser.dropoutProb = -1
   }
