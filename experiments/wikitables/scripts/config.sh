@@ -28,7 +28,7 @@ DERIVATIONS_PATH="data/dpd_output/"
 
 EXPERIMENT_NAME="fold$FOLD"
 EXPERIMENT_ID="00"
-EXPERIMENT_DIR="experiments/wikitables/output/$EXPERIMENT_ID/$EXPERIMENT_NAME/"
+EXPERIMENT_DIR="~/scratch/wikitables_data/experiments/semspurious/$EXPERIMENT_ID/$EXPERIMENT_NAME/"
 
 EPOCHS=20
 MAX_TRAINING_DERIVATIONS=100
