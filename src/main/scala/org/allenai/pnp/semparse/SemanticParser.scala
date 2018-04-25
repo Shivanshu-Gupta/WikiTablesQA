@@ -3,11 +3,10 @@ package org.allenai.pnp.semparse
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.ListBuffer
-import scala.collection.mutable.{ Map => MutableMap }
+import scala.collection.mutable.{Map => MutableMap}
 import scala.collection.mutable.MultiMap
-import scala.collection.mutable.{ Set => MutableSet }
+import scala.collection.mutable.{Set => MutableSet}
 import scala.collection.mutable.SetBuilder
-
 import org.allenai.pnp.CompGraph
 import org.allenai.pnp.Env
 import org.allenai.pnp.ExecutionScore.ExecutionScore
@@ -15,14 +14,12 @@ import org.allenai.pnp.Pnp
 import org.allenai.pnp.PnpModel
 import org.allenai.pnp.util.Trie
 import org.allenai.wikitables.SemanticParserFeatureGenerator
-
 import com.google.common.base.Preconditions
 import com.jayantkrish.jklol.ccg.lambda.Type
 import com.jayantkrish.jklol.ccg.lambda.TypeDeclaration
 import com.jayantkrish.jklol.ccg.lambda2.Expression2
 import com.jayantkrish.jklol.ccg.lambda2.StaticAnalysis
 import com.jayantkrish.jklol.util.IndexedList
-
 import edu.cmu.dynet._
 import edu.cmu.dynet.Expression._
 import org.allenai.wikitables.LfPreprocessor
@@ -490,76 +487,70 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
         // attentionVector = transpose(wordAttentions * input.tokenMatrix)
         // Attention vector using the encoded tokens
         attentionVector = Expression.transpose(wordAttentions * input.encodedTokenMatrix)
-        attentionAndRnn = concatenateArray(Array(attentionVector, rnnOutputDropout))
         actionHiddenWeights <- Pnp.param(SemanticParser.ACTION_HIDDEN_WEIGHTS)
         actionHiddenBias <- Pnp.param(SemanticParser.ACTION_HIDDEN_BIAS)
         actionHiddenWeights2 <- Pnp.param(SemanticParser.ACTION_HIDDEN_ACTION + hole.t)
         actionHiddenBias2 <- Pnp.param(SemanticParser.ACTION_HIDDEN_ACTION_BIAS + hole.t)
+        attentionAndRnn = concatenateArray(Array(attentionVector, rnnOutputDropout))
         hidden = if (config.actionBias) {
           (actionHiddenWeights * attentionAndRnn) + actionHiddenBias
         } else {
           (actionHiddenWeights * attentionAndRnn)
         }
+
         actionHidden = if (config.relu) {
           Expression.rectify(hidden)
         } else {
           Expression.tanh(hidden)
         }
+
         actionHiddenDropout = if (dropoutProb > 0.0) {
           Expression.dropout(actionHidden, dropoutProb.asInstanceOf[Float])
         } else {
           actionHidden
         }
+
         actionHiddenScores = if (config.actionBias) {
           (actionHiddenWeights2 * actionHidden) + actionHiddenBias2
         } else {
           actionHiddenWeights2 * actionHidden
         }
+
+        // Score the templates.
         actionScores =  Expression.pickrange(actionHiddenScores, 0, baseTemplates.length)
         // Score the entity templates
+        // _ = println("scoring entities")
         entityScores = if (entities.nonEmpty) {
           Expression.transpose(wordAttentions * entityTokenMatrix)
         } else {
           null
         }
         cg <- Pnp.computationGraph()
-        templatesWithScores <- if(entityScores == null) {
-          Pnp.choose(Seq((baseTemplates, actionScores)), Seq(1.0))
+        templatesWithScores <- if(entities.isEmpty) {
+          Pnp.value((baseTemplates, actionScores))
         } else if(config.templateTypeSelection == "probability") {
           val templateScorePairs = Array((baseTemplates, actionScores), (entityTemplates.toVector, entityScores))
           val templateTypeProbWeights = Expression.parameter(cg.getParameter(SemanticParser.TEMPLATE_TYPE_PROB_WEIGHTS))
           val templateTypeProbBias = Expression.parameter(cg.getParameter(SemanticParser.TEMPLATE_TYPE_PROB_BIAS))
-          val actionTemplateProb = Expression.logistic (Expression.dotProduct (templateTypeProbWeights, attentionAndRnn) + templateTypeProbBias)
-          val distribution = Expression.concatenate(actionTemplateProb, 1 - actionTemplateProb)
+          val actionTemplateProb = Expression.dotProduct(templateTypeProbWeights, attentionAndRnn) + templateTypeProbBias
+          val distribution = Expression.concatenate(actionTemplateProb, Expression.zeroes(Dim(1)))
           Pnp.choose(templateScorePairs, distribution)
         } else {
-          val allScores = if (config.templateTypeSelection == "multiplier") {
-            val entityTemplateScoreMultiplier = Expression.parameter (cg.getParameter (SemanticParser.ENTITY_TEMPLATE_SCORE_MULTIPLIER))
-            Expression
+          val allScores = if (config.templateTypeSelection.endsWith("multiplier")) {
+            val entityTemplateScoreMultiplier = if(config.templateTypeSelection == "const-multiplier") {
+              Expression.parameter (cg.getParameter (SemanticParser.ENTITY_TEMPLATE_SCORE_MULTIPLIER))
+            } else {
+              val templateTypeProbWeights = Expression.parameter(cg.getParameter(SemanticParser.TEMPLATE_TYPE_PROB_WEIGHTS))
+              val templateTypeProbBias = Expression.parameter(cg.getParameter(SemanticParser.TEMPLATE_TYPE_PROB_BIAS))
+              Expression.dotProduct(templateTypeProbWeights, attentionAndRnn) + templateTypeProbBias
+            }
             val scaledEntityScores = entityScores * entityTemplateScoreMultiplier
             concatenateArray(Array(actionScores, scaledEntityScores))
           } else {
             concatenateArray(Array(actionScores, entityScores))
           }
-          Pnp.choose(Seq((allTemplates, allScores)), Seq(1.0))
+          Pnp.value((allTemplates, allScores))
         }
-//        allScores = if(entityScores == null) {
-//          actionScores
-//        } else if (config.templateTypeSelection == "probability") {
-//          val templateTypeProbWeights = Expression.parameter(cg.getParameter(SemanticParser.TEMPLATE_TYPE_PROB_WEIGHTS))
-//          val templateTypeProbBias = Expression.parameter(cg.getParameter(SemanticParser.TEMPLATE_TYPE_PROB_BIAS))
-//          val actionTemplateProb = Expression.logistic (Expression.dotProduct (templateTypeProbWeights, attentionAndRnn)
-//            + templateTypeProbBias)
-//          val condActionScores = actionTemplateProb * actionScores
-//          val condEntityScores = (1 - actionTemplateProb) * entityScores
-//          concatenateArray (Array (condActionScores, condEntityScores))
-//        } else if (config.templateTypeSelection == "multiplier") {
-//          val entityTemplateScoreMultiplier = Expression.parameter(cg.getParameter(SemanticParser.ENTITY_TEMPLATE_SCORE_MULTIPLIER))
-//          val scaledEntityScores = entityTemplateScoreMultiplier * entityScores
-//          concatenateArray (Array (actionScores, scaledEntityScores))
-//        } else {
-//          concatenateArray (Array (actionScores, entityScores))
-//        }
 
         // Nondeterministically select which template to update
         // the parser's state with. The tag for this choice is
@@ -936,10 +927,10 @@ object SemanticParser {
     model.addParameter(ROOT_BIAS_PARAM, Dim(actionSpace.rootTypes.length))
     model.addParameter(ATTENTION_WEIGHTS_PARAM, Dim(2 * config.hiddenDim, actionLstmHiddenDim))
     model.addParameter(ATTENTION_COVERAGE_WEIGHTS_PARAM, Dim(1, actionLstmHiddenDim))
-    if(config.templateTypeSelection == "probability") {
+    if(config.templateTypeSelection == "probability" || config.templateTypeSelection == "multiplier") {
       model.addParameter(TEMPLATE_TYPE_PROB_WEIGHTS, Dim(2 * config.hiddenDim + actionLstmHiddenDim))
       model.addParameter(TEMPLATE_TYPE_PROB_BIAS, Dim(1))
-    } else if(config.templateTypeSelection == "multiplier") {
+    } else if(config.templateTypeSelection == "const-multiplier") {
       model.addParameter(ENTITY_TEMPLATE_SCORE_MULTIPLIER, Dim(1, 1))
     }
 
