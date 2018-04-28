@@ -3,6 +3,7 @@ package org.allenai.wikitables;
 import java.io.*;
 import java.util.*;
 import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 
 import com.google.common.collect.Lists;
 import com.jayantkrish.jklol.ccg.lambda.ExpressionParser;
@@ -26,7 +27,8 @@ public class WikiTablesDataProcessor {
                                                boolean includeDerivations, String derivationsPath,
                                                int beamSize, int numDerivationsLimit) {
     CoreNLPAnalyzer.opts.annotators = Arrays.asList(new String[] {"tokenize", "ssplit", "pos", "lemma", "ner"});
-    EditDistanceFuzzyMatcher.opts.expandAbbreviations = true;
+    // ksk comment
+    // EditDistanceFuzzyMatcher.opts.expandAbbreviations = true;
     EditDistanceFuzzyMatcher.opts.fuzzyMatchSubstring = true;
     EditDistanceFuzzyMatcher.opts.alsoReturnUnion = true;
     EditDistanceFuzzyMatcher.opts.alsoMatchPart = true;
@@ -100,7 +102,8 @@ public class WikiTablesDataProcessor {
 
   public static CustomExample makeCustomExample(String question, String tableString, String exampleId) {
     CoreNLPAnalyzer.opts.annotators = Arrays.asList(new String[] {"tokenize", "ssplit", "pos", "lemma", "ner"});
-    EditDistanceFuzzyMatcher.opts.expandAbbreviations = true;
+    // ksk comment  
+    // EditDistanceFuzzyMatcher.opts.expandAbbreviations = true;
     EditDistanceFuzzyMatcher.opts.fuzzyMatchSubstring = true;
     EditDistanceFuzzyMatcher.opts.alsoReturnUnion = true;
     EditDistanceFuzzyMatcher.opts.alsoMatchPart = true;
@@ -121,10 +124,26 @@ public class WikiTablesDataProcessor {
     if (numDerivationsLimit != -1) {
       System.out.println("Limiting number of derivations per example to " + numDerivationsLimit);
     }
+    Builder builder = getSempreBuilder(100);
+    // int mode = 0; // Original
+    // int mode = 1; // Print subparts
+    int mode = 2; // Prune logical forms based on sub part execution, change the jar files to original
 
     for (CustomExample ex: dataset) {
       String exId = ex.getId();
-      File file = new File(derivationsPath + "/" + exId + ".gz");
+      File file = null;
+      File outFile = null;
+      if(mode == 0){
+        file = new File(derivationsPath + "/" + exId + ".gz");
+      }
+      if(mode == 1){
+        file = new File(derivationsPath + "/" + exId + ".gz");
+        outFile = new File(derivationsPath + "/" + exId + ".subp.gz");
+      }
+      if(mode == 2){
+        file = new File(derivationsPath + "/" + exId + ".subp.gz");
+        outFile = new File(derivationsPath + "/" + exId + ".pruned.gz");
+      }
 
       List<Formula> correctFormulas = Lists.newArrayList();
       if (file.exists()) {
@@ -132,29 +151,85 @@ public class WikiTablesDataProcessor {
           BufferedReader reader = new BufferedReader(new InputStreamReader(
               new GZIPInputStream(new FileInputStream(file))));
           String line;
-          while ((line = reader.readLine()) != null) {
-            correctFormulas.add(Formula.fromString(line));
+
+          BufferedWriter writer = null;
+          if(outFile != null){
+            writer = new BufferedWriter(new OutputStreamWriter(
+                new GZIPOutputStream(new FileOutputStream(outFile))));
           }
+          Set<Formula> subparts = new HashSet<>();
+          Formula origFormula = null;
+          while ((line = reader.readLine()) != null) {
+            Formula f = null;
+            if(! line.trim().isEmpty()){
+              try{
+                f = Formula.fromString(line);
+              }catch(Exception e){
+                System.out.println("Exception occured while parsing "+line);
+              }
+            }
+            if(mode == 1){
+              Set<String> subparts_str = Formulas.extractSubparts(f);
+              writer.write("Orig\t"+f+"\n");
+              for(String s: subparts_str){
+                writer.write(s+"\n");
+              }
+              writer.write("\n");
+              continue;
+            }
+            if(mode == 2){
+              if(! line.trim().isEmpty()){
+                if(line.contains("Orig\t")){
+                  origFormula = Formula.fromString(line.split("\t")[1]);
+                  continue;
+                }
+                subparts.add(f);
+                continue;
+              }
+              List<Pair<Value, Formula>> subValues = new ArrayList<>();
+              Formula matchingForumla = null;
+              Value matchingValue = null;
+              for(Formula subF: subparts){
+                Value subValue = executeFormula(subF, ex.context, builder);
+                if(subValue instanceof ErrorValue || subValue instanceof InfiniteListValue){
+                  continue;
+                }
+
+                for(Pair<Value, Formula> p: subValues){
+                    Value subValuePrev = p.getFirst();
+                    Formula subFPrev = p.getSecond();
+                    double res = builder.valueEvaluator.getCompatibility(subValue, subValuePrev);
+                    if(res == 1){
+                      matchingForumla = subFPrev;
+                      matchingValue = subValuePrev;
+                      break;
+                    }
+                }
+                if(matchingForumla != null){
+                  System.out.println("Skipping Formula : "+origFormula);
+                  System.out.println("Mathing Formulas : ");
+                  System.out.println("1. "+subF+", value= "+subValue);
+                  System.out.println("2. "+matchingForumla+", value= "+matchingValue);
+                  break;
+                }
+                subValues.add(new Pair(subValue, subF));
+              }
+              subparts = new HashSet<Formula>();
+              if(matchingForumla == null){
+                writer.write(origFormula+"\n");
+              }
+            }
+            correctFormulas.add(f);
+          }
+          writer.close();
         } catch (IOException e) {
           e.printStackTrace();
         }
       }
-      
-      if (numDerivationsLimit >= 0 && correctFormulas.size() > numDerivationsLimit) {        
-        List<Pair<Integer, Formula>> formulasWithSizes = Lists.newArrayList();
-        for (Formula f : correctFormulas) {
-          Expression2 e = ExpressionParser.expression2().parse(f.toString());
-          formulasWithSizes.add(Pair.newPair(e.size(), f));
-        }
-
-        formulasWithSizes.sort(new DerivationLengthComparator());
-        correctFormulas.clear();
-        for (Pair<Integer, Formula> p : formulasWithSizes.subList(0, numDerivationsLimit)) {
-          correctFormulas.add(p.getSecond());
-        }
-      }
-
       ex.alternativeFormulas = correctFormulas;
+    }
+    if(mode == 1 || mode == 2){
+      System.exit(0);
     }
   }
 
@@ -183,7 +258,8 @@ public class WikiTablesDataProcessor {
     FloatingParser.opts.useMaxAnchors = 2;
     DerivationPruner.opts.pruningStrategies = Arrays.asList(new String[] {"emptyDenotation", "nonLambdaError", "atomic", "tooManyValues", "badSummarizerHead", "mistypedMerge", "doubleNext", "doubleSummarizers", "sameMerge", "unsortedMerge", "typeRowMerge"});
     DerivationPruner.opts.pruningComputers = Arrays.asList(new String[] {"tables.TableDerivationPruningComputer"});
-    DerivationPruner.opts.recursivePruning = false;
+    // ksk: Not present
+    // DerivationPruner.opts.recursivePruning = false;
     Grammar.opts.inPaths = Arrays.asList(new String[] {"data/grow.grammar"});
     Grammar.opts.binarizeRules = false;
     Grammar.opts.tags = Arrays.asList(new String[] {"scoped", "merge-and", "arithmetic", "comparison", "alternative", "neq", "yearrange", "part", "closedclass", "scoped-2args-merge-and"});
@@ -230,11 +306,10 @@ public class WikiTablesDataProcessor {
     }
     
     Value pred = SEMPRE_BUILDER.executor.execute(formula, context).value;
-    /*
-    if (pred instanceof ListValue) {
-      pred = ((TableKnowledgeGraph) context.graph).getListValueWithOriginalStrings((ListValue) pred);
-    }
-    */
+    
+    // if (pred instanceof ListValue) {
+    //   pred = ((TableKnowledgeGraph) context.graph).getListValueWithOriginalStrings((ListValue) pred);
+    // }
     return pred;
   }
   
@@ -244,6 +319,9 @@ public class WikiTablesDataProcessor {
     }
     
     TableValuePreprocessor targetPreprocessor = new TableValuePreprocessor();
+    // ksk changed: added null
+
+    // target = targetPreprocessor.preprocess(target, null);
     target = targetPreprocessor.preprocess(target);
     // Print the predicted and target values.
     // System.out.println(pred + " " + targetValue);

@@ -44,7 +44,8 @@ class WikiTablesEntityLinker {
     val links = ListBuffer[(Option[Span], Formula)]()
     val foundFormulas = MutableSet[Formula]()
 
-    EditDistanceFuzzyMatcher.opts.expandAbbreviations = true;
+    //ksk comment
+    // EditDistanceFuzzyMatcher.opts.expandAbbreviations = true;
     EditDistanceFuzzyMatcher.opts.fuzzyMatchSubstring = true;
     EditDistanceFuzzyMatcher.opts.alsoReturnUnion = true;
     EditDistanceFuzzyMatcher.opts.alsoMatchPart = true;
