@@ -89,6 +89,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   var entityLinkingMlpOpt: OptionSpec[Void] = null
   var coverageOpt: OptionSpec[Void] = null
   var templateTypeSelectionOpt: OptionSpec[String] = null
+  var optimizerOpt: OptionSpec[String] = null
 
   var skipActionSpaceValidationOpt: OptionSpec[Void] = null
   var trainOnAnnotatedLfsOpt: OptionSpec[Void] = null
@@ -136,6 +137,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     entityLinkingMlpOpt = parser.accepts("entityLinkingMlp")
     coverageOpt = parser.accepts("coverage")
     templateTypeSelectionOpt = parser.accepts("templateTypeSelection").withRequiredArg().ofType(classOf[String]).defaultsTo("")
+    optimizerOpt = parser.accepts("optimizer").withRequiredArg().ofType(classOf[String]).defaultsTo("sgd:e0=0.1:edecay=0.001")
 
     skipActionSpaceValidationOpt = parser.accepts("skipActionSpaceValidation")
     trainOnAnnotatedLfsOpt = parser.accepts("trainOnAnnotatedLfs")
@@ -290,7 +292,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
       None
     }
 
-    train(trainingData, devData, parser, typeDeclaration, simplifier, lfPreprocessor,
+    train(trainingData, devData, parser, typeDeclaration, simplifier, lfPreprocessor, options.valueOf(optimizerOpt),
         options.valueOf(epochsOpt), options.valueOf(beamSizeOpt), options.valueOf(devBeamSizeOpt),
         options.valueOf(dropoutOpt), options.has(lasoOpt), modelOutputDir,
         Some(options.valueOf(modelOutputOpt)))
@@ -302,7 +304,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   def train(trainingExamples: Seq[WikiTablesExample], devExamples: Seq[WikiTablesExample],
       parser: SemanticParser, typeDeclaration: TypeDeclaration,
       simplifier: ExpressionSimplifier, preprocessor: LfPreprocessor,
-      epochs: Int, beamSize: Int, devBeamSize: Int,
+      optim: String, epochs: Int, beamSize: Int, devBeamSize: Int,
       dropout: Double, laso: Boolean, modelDir: Option[String],
       bestModelOutput: Option[String]): Unit = {
 
@@ -349,21 +351,29 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     
     // Train model
     val model = parser.model
-    val sgd = new SimpleSGDTrainer(model.model, 0.1f, 0.01f)
+    val params = optim.split(":")
+    val optimParams = params.tail.map(_.split('=')).map(x => (x(0), x(1).toFloat)).toMap
+    val optimizer = if (params.head == "sgd") {
+      val e0 = optimParams.getOrElse("e0", 0.1f)
+      val edecay = optimParams.getOrElse("edecay", 0.01f)
+      new SimpleSGDTrainer(model.model, e0, edecay)
+    } else {
+      val e0 = optimParams.getOrElse("e0", 0.001f)
+      new AdamTrainer(model.model, e0, 0.9f, 0.999f, 1e-8f)
+    }
     val logFunction = new SemanticParserLogFunction(modelDir, bestModelOutput,
         parser, trainErrorExamples, devExamples, devBeamSize, 2,
         typeDeclaration, new SimplificationComparator(simplifier),
         preprocessor)
-    
     if (laso) {
       println("Running LaSO training...")
       model.locallyNormalized = false
-      val trainer = new BsoTrainer(epochs, beamSize, 50, model, sgd, logFunction)
+      val trainer = new BsoTrainer(epochs, beamSize, 50, model, optimizer, logFunction)
       trainer.train(pnpExamples.toList)
     } else {
       println("Running loglikelihood training...")
       model.locallyNormalized = true
-      val trainer = new LoglikelihoodTrainer(epochs, beamSize, true, model, sgd,
+      val trainer = new LoglikelihoodTrainer(epochs, beamSize, true, model, optimizer,
           logFunction)
       trainer.train(pnpExamples.toList, trainingExamples)
     }
