@@ -69,7 +69,7 @@ class TestWikiTablesCli extends AbstractCli() {
   }
 
   override def run(options: OptionSet): Unit = {
-    Initialize.initialize(Map("dynet-mem" -> "4096"))
+    Initialize.initialize(Map("dynet-mem" -> "4096", "random-seed" -> 1442801015L))
 
     // Get the predicted denotations of each model. (and print out 
     // error analysis)

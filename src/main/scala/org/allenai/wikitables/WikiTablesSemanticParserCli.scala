@@ -200,7 +200,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   }
 
   override def run(options: OptionSet): Unit = {
-    Initialize.initialize(Map("dynet-mem" -> "4096"))
+    Initialize.initialize(Map("dynet-mem" -> "4096", "random-seed" -> 1442801015L))
  
     val typeDeclaration = if (options.has(seq2TreeOpt)) {
       new Seq2TreeTypeDeclaration()

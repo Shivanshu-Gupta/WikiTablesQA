@@ -25,7 +25,7 @@ case class WikiTablesExample(
 
   val logicalForms = goldLogicalForm match {
     case None => possibleLogicalForms
-    case Some(lf) => lf
+    case Some(lf) => Set(lf)
     // Note: Uncomment this if want to rank gold lf.
     //case Some(lf) => possibleLogicalForms + lf
   }
