@@ -2,7 +2,7 @@
 
 source "experiments/wikitables/scripts/config.sh"
 
-MY_NAME="parser"
+MY_NAME="pruned_parser_1"
 MY_DIR=$EXPERIMENT_DIR/$MY_NAME/
 MY_MODEL=$MY_DIR/parser_final.ser
 MODEL_DIR=$MY_DIR/models/
