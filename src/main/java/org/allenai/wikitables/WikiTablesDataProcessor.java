@@ -219,7 +219,9 @@ public class WikiTablesDataProcessor {
                 writer.write(origFormula+"\n");
               }
             }
-            correctFormulas.add(f);
+            if(mode == 0){
+              correctFormulas.add(f);
+            }
           }
           writer.close();
         } catch (IOException e) {
