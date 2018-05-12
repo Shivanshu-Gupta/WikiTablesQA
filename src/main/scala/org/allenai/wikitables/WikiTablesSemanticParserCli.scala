@@ -135,6 +135,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     concatLstmForDecoderOpt = parser.accepts("concatLstmForDecoder")
     maxPoolEntityTokenSimilaritiesOpt = parser.accepts("maxPoolEntityTokenSimilarities")
     entityLinkingMlpOpt = parser.accepts("entityLinkingMlp")
+
     coverageOpt = parser.accepts("coverage")
     templateTypeSelectionOpt = parser.accepts("templateTypeSelection").withRequiredArg().ofType(classOf[String]).defaultsTo("")
     optimizerOpt = parser.accepts("optimizer").withRequiredArg().ofType(classOf[String]).defaultsTo("sgd:e0=0.1:edecay=0.001")
