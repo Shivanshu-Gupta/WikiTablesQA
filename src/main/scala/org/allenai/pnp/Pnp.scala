@@ -203,15 +203,11 @@ case class CategoricalPnp[A](dist: Array[(A, Double)], tag: Any) extends Pnp[A] 
   }
 }
 
-case class ParameterizedCategoricalPnp[A](items: Array[A], parameter: Expression, tag: Any, isProbability: Boolean = false) extends Pnp[A] {
+case class ParameterizedCategoricalPnp[A](items: Array[A], parameter: Expression, tag: Any, isScore: Boolean = true) extends Pnp[A] {
 
   def getTensor(graph: CompGraph): (Expression, Tensor, Int) = {
-    val expr = if (graph.locallyNormalized) {
-      if(!isProbability) {
-        Expression.logSoftmax(parameter)
-      } else {
-        Expression.log(parameter)
-      }
+    val expr = if (graph.locallyNormalized && isScore) {
+      Expression.logSoftmax(parameter)
     } else {
       parameter
     }
@@ -571,8 +567,8 @@ object Pnp {
   /** Chooses an item. The ith item's score/probability is the
     * ith index in parameter.
     */
-  def choose[A](items: Array[A], parameter: Expression, tag: Any, isProbability: Boolean = false): Pnp[A] = {
-    ParameterizedCategoricalPnp(items, parameter, tag, isProbability)
+  def choose[A](items: Array[A], parameter: Expression, tag: Any, isScore: Boolean = true): Pnp[A] = {
+    ParameterizedCategoricalPnp(items, parameter, tag, isScore)
   }
 
   def choose[A](items: Array[A], parameter: Expression): Pnp[A] = {
