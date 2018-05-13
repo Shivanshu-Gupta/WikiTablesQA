@@ -442,16 +442,18 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
       // println("computing attention")
       for {
         // Compute an attention vector
+        cg <- Pnp.computationGraph()
         attentionWeights <- Pnp.param(SemanticParser.ATTENTION_WEIGHTS_PARAM)
-        coverageWeights <- Pnp.param(SemanticParser.ATTENTION_COVERAGE_WEIGHTS_PARAM)
         wordAttentions = if (config.coverage) {
           // println("computing word attention using coverage")
+          val coverageWeights = Expression.parameter(cg.getParameter(SemanticParser.ATTENTION_COVERAGE_WEIGHTS_PARAM))
           Expression.transpose(Expression.softmax((input.encodedTokenMatrix * attentionWeights + coverage * coverageWeights)
             * rnnOutputDropout))
         } else {
           // println("computing word attention")
           Expression.transpose(Expression.softmax(input.encodedTokenMatrix * attentionWeights * rnnOutputDropout))
         }
+
         // Attention vector using the input token vectors
         // attentionVector = transpose(wordAttentions * input.tokenMatrix)
         // Attention vector using the encoded tokens
@@ -488,7 +490,7 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
         }
 
         // Score the templates.
-        actionScores =  Expression.pickrange(actionHiddenScores, 0, baseTemplates.length)
+        actionScores = Expression.pickrange(actionHiddenScores, 0, baseTemplates.length)
 
         // Score the entity templates
         // _ = println("scoring entities")
@@ -497,7 +499,6 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
         } else {
           null
         }
-        cg <- Pnp.computationGraph()
 
         // Nondeterministically select which template to update
         // the parser's state with. The tag for this choice is
@@ -537,8 +538,8 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
           Pnp.choose(allTemplates.zipWithIndex.toArray, allScores, state)
         }
 
-        nextCoverage = if(config.attentionAggregation == "all"
-          || (config.attentionAggregation == "onlyEntities" && templateTuple._2 >= baseTemplates.length)) {
+        nextCoverage = if(config.coverage && (config.attentionAggregation == "all"
+          || (config.attentionAggregation == "onlyEntities" && templateTuple._2 >= baseTemplates.length))) {
           Expression.sum(coverage, Expression.transpose(wordAttentions))
         } else {
           coverage
@@ -909,7 +910,9 @@ object SemanticParser {
     model.addParameter(ROOT_WEIGHTS_PARAM, Dim(actionSpace.rootTypes.length, 2 * config.hiddenDim))
     model.addParameter(ROOT_BIAS_PARAM, Dim(actionSpace.rootTypes.length))
     model.addParameter(ATTENTION_WEIGHTS_PARAM, Dim(2 * config.hiddenDim, actionLstmHiddenDim))
-    model.addParameter(ATTENTION_COVERAGE_WEIGHTS_PARAM, Dim(1, actionLstmHiddenDim))
+    if(config.coverage) {
+      model.addParameter(ATTENTION_COVERAGE_WEIGHTS_PARAM, Dim(1, actionLstmHiddenDim))
+    }
     if(config.templateTypeSelection == "probability" || config.templateTypeSelection == "multiplier") {
       model.addParameter(TEMPLATE_TYPE_PROB_WEIGHTS, Dim(2 * config.hiddenDim + actionLstmHiddenDim))
       model.addParameter(TEMPLATE_TYPE_PROB_BIAS, Dim(1))
