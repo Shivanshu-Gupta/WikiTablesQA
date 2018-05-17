@@ -361,6 +361,8 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
       // Encode input tokens using an LSTM.
       input <- encode(tokens, entityLinking)
 
+      // Must get the entity distribution over here
+
       // _ = println("parsing")
       state = SemanticParserState.start
 
