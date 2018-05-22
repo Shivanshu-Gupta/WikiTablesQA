@@ -513,22 +513,22 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
         templateTuple <- if(entities.isEmpty) {
           Pnp.choose(baseTemplates.zipWithIndex.toArray, actionScores, state)
         } else if(config.templateTypeSelection == "probability") {
-          val templateTypeProbWeights = Expression.parameter(cg.getParameter(
-            SemanticParser.TEMPLATE_TYPE_PROB_WEIGHTS))
-          val templateTypeProbBias = Expression.parameter(cg.getParameter(
-            SemanticParser.TEMPLATE_TYPE_PROB_BIAS))
-          val templateTypeLogProbs = Expression.logSoftmax(concatenateArray(Array(Expression.zeroes(Dim(1)),
-            Expression.dotProduct(templateTypeProbWeights, attentionAndRnn) + templateTypeProbBias)))
-          val actionLogProbs = Expression.pick(Expression.colwiseAdd(Expression.reshape(Expression.logSoftmax(actionScores),
-            Dim(1, baseTemplates.length)), Expression.pick(templateTypeLogProbs, 0)), 0)
-          val entityLogProbs = Expression.pick(Expression.colwiseAdd(Expression.reshape(Expression.logSoftmax(entityScores),
-            Dim(1, entityTemplates.length)), Expression.pick(templateTypeLogProbs, 1)), 0)
+          val templateTypeProbWeights = Expression.parameter(cg.getParameter(SemanticParser.TEMPLATE_TYPE_PROB_WEIGHTS))
+          val templateTypeProbBias = Expression.parameter(cg.getParameter(SemanticParser.TEMPLATE_TYPE_PROB_BIAS))
+          val entityTemplateScore = Expression.dotProduct(templateTypeProbWeights, attentionAndRnn) + templateTypeProbBias
+          val templateTypeLogProbs = Expression.logSoftmax(concatenateArray(Array(Expression.zeroes(Dim(1)), entityTemplateScore)))
+          val actionLogProbs = Expression.pick(Expression.colwiseAdd(
+            Expression.reshape(Expression.logSoftmax(actionScores), Dim(1, baseTemplates.length)),
+            Expression.pick(templateTypeLogProbs, 0)), 0)
+          val entityLogProbs = Expression.pick(Expression.colwiseAdd(
+            Expression.reshape(Expression.logSoftmax(entityScores), Dim(1, entityTemplates.length)),
+            Expression.pick(templateTypeLogProbs, 1)), 0)
           val allLogProbs = concatenateArray(Array(actionLogProbs, entityLogProbs))
           Pnp.choose(allTemplates.zipWithIndex.toArray, allLogProbs, state, isScore = false)
         } else {
           val allScores = if (config.templateTypeSelection.endsWith("multiplier")) {
             val entityTemplateScoreMultiplier = if(config.templateTypeSelection == "const-multiplier") {
-              Expression.parameter (cg.getParameter (SemanticParser.ENTITY_TEMPLATE_SCORE_MULTIPLIER))
+              Expression.parameter(cg.getParameter(SemanticParser.ENTITY_TEMPLATE_SCORE_MULTIPLIER))
             } else {
               val templateTypeProbWeights = Expression.parameter(cg.getParameter(SemanticParser.TEMPLATE_TYPE_PROB_WEIGHTS))
               val templateTypeProbBias = Expression.parameter(cg.getParameter(SemanticParser.TEMPLATE_TYPE_PROB_BIAS))
@@ -543,13 +543,15 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
         }
 
         nextCoverage = if(config.coverage && (config.attentionAggregation == "all"
-          || (config.attentionAggregation == "onlyEntities" && templateTuple._2 >= baseTemplates.length))) {
+          || (config.attentionAggregation == "entityTemplates" && templateTuple._2 >= baseTemplates.length))) {
           Expression.sum(coverage, Expression.transpose(wordAttentions))
         } else {
           coverage
         }
         nextState = templateTuple._1.apply(state).addAttention(wordAttentions)
-              .addActionScores(baseTemplates, actionScores).addEntityScores(entityTemplates.toVector, entityScores)
+          .addTemplateType(if(templateTuple._2 < baseTemplates.length) "base" else "entity")
+          .addActionScores(baseTemplates, actionScores)
+          .addEntityScores(entityTemplates.toVector, entityScores)
         // Get the LSTM input parameters associated with the chosen
         // template.
         actionLookup = cg.getLookupParameter(SemanticParser.ACTION_LOOKUP_PARAM + hole.t)

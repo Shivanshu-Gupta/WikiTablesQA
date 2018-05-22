@@ -87,9 +87,12 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   var concatLstmForDecoderOpt: OptionSpec[Void] = null
   var maxPoolEntityTokenSimilaritiesOpt: OptionSpec[Void] = null
   var entityLinkingMlpOpt: OptionSpec[Void] = null
+
   var coverageOpt: OptionSpec[Void] = null
+  var attentionAggregationOpt: OptionSpec[String] = null
   var templateTypeSelectionOpt: OptionSpec[String] = null
   var optimizerOpt: OptionSpec[String] = null
+  var attentionLossOpt: OptionSpec[String] = null
 
   var skipActionSpaceValidationOpt: OptionSpec[Void] = null
   var trainOnAnnotatedLfsOpt: OptionSpec[Void] = null
@@ -137,8 +140,10 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     entityLinkingMlpOpt = parser.accepts("entityLinkingMlp")
 
     coverageOpt = parser.accepts("coverage")
+    attentionAggregationOpt = parser.accepts("attentionAggregation").withRequiredArg().ofType(classOf[String]).defaultsTo("all")
     templateTypeSelectionOpt = parser.accepts("templateTypeSelection").withRequiredArg().ofType(classOf[String]).defaultsTo("")
-    optimizerOpt = parser.accepts("optimizer").withRequiredArg().ofType(classOf[String]).defaultsTo("sgd:e0=0.1:edecay=0.001")
+    optimizerOpt = parser.accepts("optimizer").withRequiredArg().ofType(classOf[String]).defaultsTo("sgd:e0=0.1:edecay=0.01")
+    attentionLossOpt = parser.accepts("attentionLoss").withRequiredArg().ofType(classOf[String]).defaultsTo("")
 
     skipActionSpaceValidationOpt = parser.accepts("skipActionSpaceValidation")
     trainOnAnnotatedLfsOpt = parser.accepts("trainOnAnnotatedLfs")
@@ -273,6 +278,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     config.maxPoolEntityTokenSimiliarities = options.has(maxPoolEntityTokenSimilaritiesOpt)
     config.featureMlp = options.has(entityLinkingMlpOpt)
     config.coverage = options.has(coverageOpt)
+    config.attentionAggregation = options.valueOf(attentionAggregationOpt)
     config.templateTypeSelection = options.valueOf(templateTypeSelectionOpt)
     config.preprocessor = lfPreprocessor
     config.typeDeclaration = typeDeclaration
@@ -295,7 +301,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
 
     train(trainingData, devData, parser, typeDeclaration, simplifier, lfPreprocessor, options.valueOf(optimizerOpt),
         options.valueOf(epochsOpt), options.valueOf(beamSizeOpt), options.valueOf(devBeamSizeOpt),
-        options.valueOf(dropoutOpt), options.has(lasoOpt), modelOutputDir,
+        options.valueOf(dropoutOpt), options.has(lasoOpt), options.valueOf(attentionLossOpt), modelOutputDir,
         Some(options.valueOf(modelOutputOpt)))
   }
 
@@ -306,8 +312,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
       parser: SemanticParser, typeDeclaration: TypeDeclaration,
       simplifier: ExpressionSimplifier, preprocessor: LfPreprocessor,
       optim: String, epochs: Int, beamSize: Int, devBeamSize: Int,
-      dropout: Double, laso: Boolean, modelDir: Option[String],
-      bestModelOutput: Option[String]): Unit = {
+      dropout: Double, laso: Boolean, attentionLoss: String,
+      modelDir: Option[String], bestModelOutput: Option[String]): Unit = {
 
     parser.dropoutProb = dropout
     val pnpExamples = for {
@@ -315,7 +321,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
       sentence = x.sentence
       tokenIds = sentence.getAnnotation("tokenIds").asInstanceOf[Array[Int]]
       entityLinking = sentence.getAnnotation("entityLinking").asInstanceOf[EntityLinking]
-      unconditional = parser.generateExpression(tokenIds, entityLinking)
+//      unconditional = parser.generateExpression(tokenIds, entityLinking)
+      unconditional = parser.parse(tokenIds, entityLinking)
       oracle <- if (laso) {
         parser.getMultiMarginScore(x.logicalForms, entityLinking, typeDeclaration)
       } else {
@@ -353,7 +360,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     // Train model
     val model = parser.model
     val params = optim.split(":")
-    val optimParams = params.tail.map(_.split('=')).map(x => (x(0), x(1).toFloat)).toMap
+    val optimParams = params.tail.map(_.split('=')).filter(_.length == 2).map(x => (x(0), x(1).toFloat)).toMap
     val optimizer = if (params.head == "adam") {
       val e0 = optimParams.getOrElse("e0", 0.001f)
       new AdamTrainer(model.model, e0, 0.9f, 0.999f, 1e-8f)
@@ -375,9 +382,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     } else {
       println("Running loglikelihood training...")
       model.locallyNormalized = true
-      val trainer = new LoglikelihoodTrainer(epochs, beamSize, true, model, optimizer,
-          logFunction)
-      trainer.train(pnpExamples.toList, trainingExamples)
+      val trainer = new LoglikelihoodTrainer(epochs, beamSize, true, model, optimizer, logFunction)
+      trainer.train(pnpExamples.toList, trainingExamples, attentionLoss)
     }
     parser.dropoutProb = -1
   }
