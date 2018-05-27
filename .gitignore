@@ -42,3 +42,8 @@ lib/stanford-corenlp-*models.jar
 
 # logs
 experiments/wikitables/output
+logs/
+
+hpc_scripts/
+
+scratch
