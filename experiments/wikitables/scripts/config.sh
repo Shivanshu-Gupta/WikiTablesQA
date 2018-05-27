@@ -3,8 +3,7 @@
 # Which fold to train on.
 #FOLD=3
 SCRIPT_DIR="experiments/wikitables/scripts/"
-EXPERIMENT_DIR="/scratch/cse/dual/cs5130298/dpd/miml/experiments/$EXP_TYPE/$EXP_NAME/FOLD_$FOLD"
-#EXPERIMENT_DIR="/analytics/shivanshu/dpd/miml/experiments/$EXP_TYPE/$EXP_ID"
+EXPERIMENT_DIR="/scratch/cse/dual/cs5130298/dpd/miml/experiments/$EXP_TYPE/$LF_TYPE/$EXP_NAME/FOLD_$FOLD"
 
 # Training data.
 # This is a subsample of 100 examples
