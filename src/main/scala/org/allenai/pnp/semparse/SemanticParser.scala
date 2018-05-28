@@ -370,12 +370,12 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
       rootBias <- Pnp.param(SemanticParser.ROOT_BIAS_PARAM)
       rootScores = (rootWeights * input.sentEmbedding) + rootBias
       rootType <- Pnp.choose(actionSpace.rootTypes, rootScores, state)
-
+      rootParentState <- Pnp.param(SemanticParser.ROOT_PARENT_STATE)
       // _ = println("parsing 2")
       // Recursively generate a logical form using an LSTM to
       // select logical form templates to expand on typed holes
       // in the partially-generated logical form.
-      expr <- parse(input, actionBuilder, state.addRootType(rootType))
+      expr <- parse(input, actionBuilder, state.addRootType(rootType, rootParentState))
     } yield {
       expr
     }
@@ -432,7 +432,7 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
       // Update the LSTM and use its output to score
       // the applicable templates.
       // println("lstm add input")
-      val rnnOutput = builder.addInput(rnnState, prevInput)
+      val rnnOutput = builder.addInput(rnnState, concatenateArray(Array(prevInput, hole.parentState)))
       val rnnOutputDropout = if (dropoutProb > 0.0) {
         Expression.dropout(rnnOutput, dropoutProb.asInstanceOf[Float])
       } else {
@@ -548,8 +548,6 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
         } else {
           coverage
         }
-        nextState = templateTuple._1.apply(state).addAttention(wordAttentions)
-              .addActionScores(baseTemplates, actionScores).addEntityScores(entityTemplates.toVector, entityScores)
         // Get the LSTM input parameters associated with the chosen
         // template.
         actionLookup = cg.getLookupParameter(SemanticParser.ACTION_LOOKUP_PARAM + hole.t)
@@ -576,6 +574,12 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
         } else {
           lstmInput1
         }
+        parentState = ListBuffer[Expression]()
+        parentParts = config.useParent.split('-').toSet
+        _ = if(parentParts.contains("action")) parentState.append(actionInput)
+        _ = if(parentParts.contains("attention")) parentState.append(attentionVector)
+        nextState = templateTuple._1.apply(state, concatenateArray(parentState.toArray)).addAttention(wordAttentions)
+          .addActionScores(baseTemplates, actionScores).addEntityScores(entityTemplates.toVector, entityScores)
 
         // _ = println("recursing")
         // Recursively fill in any remaining holes.
@@ -606,7 +610,7 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
     val typeMap = StaticAnalysis.inferTypeMap(exp, TypeDeclaration.TOP, typeDeclaration)
       .asScala.toMap
 
-    var state = SemanticParserState.start().addRootType(typeMap(0))
+    var state = SemanticParserState.start().addRootType(typeMap(0), null)
     holeIndexMap(state.nextHole.get.id) = 0
 
     while (state.nextHole.isDefined) {
@@ -630,7 +634,7 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
       }
 
       val theMatch = matches.toList(0)
-      state = theMatch.apply(state)
+      state = theMatch.apply(state, null)
 
       actionTypes += curType
       actions += theMatch
@@ -841,6 +845,8 @@ class SemanticParserConfig extends Serializable {
   var featureMlp = false
   var featureMlpDim = 50
 
+  // added by Shivanshu
+  var useParent = ""
   var coverage = false
   var attentionAggregation = "all"
   var templateTypeSelection = ""
@@ -864,12 +870,17 @@ object SemanticParser {
   val ROOT_WEIGHTS_PARAM = "rootWeights"
   val ROOT_BIAS_PARAM = "rootBias"
 
+  // added for parent input to first lstm state
+  val ROOT_PARENT_STATE = "rootInput:"
+
   val BEGIN_ACTIONS = "beginActions:"
   val ACTION_LOOKUP_PARAM = "actionLookup:"
 
   val ATTENTION_WEIGHTS_PARAM = "attentionWeights:"
+  // added for coverage - Shivanshu
   val ATTENTION_COVERAGE_WEIGHTS_PARAM = "attentionCoverageWeights:"
 
+  // added by templateTypeSelection - Shivanshu
   val TEMPLATE_TYPE_PROB_WEIGHTS = "templateTypeProbWeights"
   val TEMPLATE_TYPE_PROB_BIAS = "templateTypeProbBias"
   val ENTITY_TEMPLATE_SCORE_MULTIPLIER = "entityTemplateScoreMultiplier"
@@ -907,7 +918,14 @@ object SemanticParser {
     } else {
       config.hiddenDim
     }
-    val actionLstmInputDim = config.actionDim + 2 * config.hiddenDim
+
+    var parentStateDim = 0
+    val parentParts = config.useParent.split('-').toSet
+    if(parentParts.contains("action")) parentStateDim += config.actionDim
+    if(parentParts.contains("attention")) parentStateDim += 2 * config.hiddenDim
+    model.addParameter(ROOT_PARENT_STATE, Dim(parentStateDim))
+
+    val actionLstmInputDim = config.actionDim + 2 * config.hiddenDim + parentStateDim
 
     // Initialize model
     // TODO: document these parameters.

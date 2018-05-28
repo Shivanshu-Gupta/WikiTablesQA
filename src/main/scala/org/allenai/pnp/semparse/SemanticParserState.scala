@@ -114,12 +114,12 @@ case class SemanticParserState(parts: Map[Int, ExpressionPart], unfilledHoleIds:
     rootType != null
   }
 
-  def addRootType(rootType: Type): SemanticParserState = {
+  def addRootType(rootType: Type, rootParentState: Expression): SemanticParserState = {
     Preconditions.checkState(unfilledHoleIds.length == 0 && numActions == 0,
         "The root type can only be added at the beginning of parsing".asInstanceOf[AnyRef])
     
     val scope = Scope(List.empty)
-    SemanticParserState(parts, List(Hole(0, rootType, scope, false)), 1, 0, rootType, List(), List(), List(), List(), List(), List())
+    SemanticParserState(parts, List(Hole(0, rootType, scope, false, rootParentState)), 1, 0, rootType, List(), List(), List(), List(), List(), List())
   }
 }
 
@@ -143,4 +143,4 @@ case class ExpressionPart(val expr: Expression2,
   }
 }
 
-case class Hole(id: Int, t: Type, scope: Scope, repeated: Boolean)
+case class Hole(id: Int, t: Type, scope: Scope, repeated: Boolean, parentState: Expression = null)
