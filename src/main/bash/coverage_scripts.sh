@@ -15,3 +15,12 @@ for fold in $folds
 for e0 in $e0s
 for ed in $eds
 qsub -q low -P cse -N $weight$type$model -e logs/$model$type$weight$fold$optim$e0$ed.err -o logs/$model$type$weight$fold$optim$e0$ed.out -lselect=1:ncpus=4:mem=30g -lwalltime=14:00:00 -v optim=$optim,e0=$e0,ed=$ed,fold=$fold,type=$type,weight=$weight -V ./hpc_scripts/$model.sh
+
+# parent experiments
+model=tree optim=sgd e0s=(0.1) eds=(0.01) folds=(1 2 3 4 5)
+parentAspects=(action attention action-attention)
+for parent in $parentAspects
+for fold in $folds
+for e0 in $e0s
+for ed in $eds
+qsub -q low -P cse -N $fold$parent$model -e logs/$model$parent$fold$optim$e0$ed.err -o logs/$model$parent$fold$optim$e0$ed.out -lselect=1:ncpus=4:mem=30g -lwalltime=14:00:00 -v optim=$optim,e0=$e0,ed=$ed,fold=$fold,parent=$parent -V ./hpc_scripts/$model.sh
