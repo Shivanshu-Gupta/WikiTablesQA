@@ -576,6 +576,7 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
         }
         parentState = ListBuffer[Expression]()
         parentParts = config.useParent.split('-').toSet
+        _ = if(parentParts.contains("hidden")) parentState.append(Expression.concatenate(builder.getH(nextRnnState)))
         _ = if(parentParts.contains("action")) parentState.append(actionInput)
         _ = if(parentParts.contains("attention")) parentState.append(attentionVector)
         nextState = templateTuple._1.apply(state, concatenateArray(parentState.toArray)).addAttention(wordAttentions)
@@ -921,6 +922,7 @@ object SemanticParser {
 
     var parentStateDim = 0
     val parentParts = config.useParent.split('-').toSet
+    if(parentParts.contains("hidden")) parentStateDim += actionLstmHiddenDim
     if(parentParts.contains("action")) parentStateDim += config.actionDim
     if(parentParts.contains("attention")) parentStateDim += 2 * config.hiddenDim
     model.addParameter(ROOT_PARENT_STATE, Dim(parentStateDim))
