@@ -60,22 +60,24 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
       log.startTimer("pp_loglikelihood")
       for((wikiexample, example) <- Random.shuffle(wikiexamples zip examples)) {
         ComputationGraph.renew()
+
         val env = example.env
         val context = PnpInferenceContext.init(model).setLog(log)
-        //println("example: " + wikiexample.id)
+
         // Compute the distribution over correct executions.
         log.startTimer("pp_loglikelihood/forward")
         val conditional = example.conditional.beamSearch(beamSize, -1,
-          env, context.addExecutionScore(example.conditionalExecutionScore))          
+          env, context.addExecutionScore(example.conditionalExecutionScore))
         log.stopTimer("pp_loglikelihood/forward")
 
-        log.startTimer("pp_loglikelihood/build_exloss")
+        log.startTimer("pp_loglikelihood/build_loss")
         val exLosses = conditional.executions.map(_.env.getScore)
-        //println(exLosses)
+
         val logProbExpr = if (exLosses.isEmpty) {
           Preconditions.checkState(sumMultipleExecutions,
-          "Found %s conditional executions (expected exactly 1) for example: %s",
-          conditional.executions.size.asInstanceOf[AnyRef], example)
+            "Found %s conditional executions (expected exactly 1) for example: %s",
+            conditional.executions.size.asInstanceOf[AnyRef], example)
+
           null
         } else if (exLosses.length == 1) {
           exLosses.head
@@ -92,7 +94,8 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
             getLossExpr(wikiexample.id, exLosses)
           }
         }
-        log.stopTimer("pp_loglikelihood/build_exloss")
+        log.stopTimer("pp_loglikelihood/build_loss")
+
         val lossExpr = -1.0f * logProbExpr
         if (lossExpr != null) {
           log.startTimer("pp_loglikelihood/eval_loss")
