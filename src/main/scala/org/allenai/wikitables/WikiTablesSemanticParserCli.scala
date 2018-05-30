@@ -207,7 +207,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   }
 
   override def run(options: OptionSet): Unit = {
-    Initialize.initialize(Map("dynet-mem" -> "2048"))
+    Initialize.initialize(Map("dynet-mem" -> "2048", "random-seed" -> 1442801015L))
 
     val typeDeclaration = if (options.has(seq2TreeOpt)) {
       new Seq2TreeTypeDeclaration()
@@ -313,14 +313,15 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
       sentence = x.sentence
       tokenIds = sentence.getAnnotation("tokenIds").asInstanceOf[Array[Int]]
       entityLinking = sentence.getAnnotation("entityLinking").asInstanceOf[EntityLinking]
-      unconditional = parser.generateExpression(tokenIds, entityLinking)
+//      unconditional = parser.generateExpression(tokenIds, entityLinking)
+      unconditional = parser.parse(tokenIds, entityLinking)
       oracle <- if (laso) {
         parser.getMultiMarginScore(x.logicalForms, entityLinking, typeDeclaration)
       } else {
         parser.getMultiLabelScore(x.logicalForms, entityLinking, typeDeclaration)
       }
     } yield {
-      PnpExample(unconditional, unconditional, Env.init, oracle)
+      PnpExample(unconditional, unconditional, Env.init, oracle, sentence.getWords)
     }
 
     println(pnpExamples.size + " training examples after oracle generation.")

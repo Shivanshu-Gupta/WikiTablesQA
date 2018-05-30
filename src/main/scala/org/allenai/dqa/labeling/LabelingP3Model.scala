@@ -5,6 +5,7 @@ import org.allenai.pnp.PnpExample
 import org.allenai.pnp.Pnp
 import org.allenai.pnp.Env
 import org.allenai.pnp.PnpModel
+import java.util
 
 class LabelingP3Model(val parser: SemanticParser,
     val executor: LabelingExecutor, val answerSelector: AnswerSelector) {

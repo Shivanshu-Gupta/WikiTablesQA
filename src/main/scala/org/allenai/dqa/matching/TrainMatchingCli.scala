@@ -170,7 +170,7 @@ class TrainMatchingCli extends AbstractCli {
         matchingModel.getMarginScore(x.label)
       }
       
-      PnpExample(unconditional, unconditional, Env.init, oracle) 
+      PnpExample(unconditional, unconditional, Env.init, oracle)
     }
 
     val learningRate = 0.01f

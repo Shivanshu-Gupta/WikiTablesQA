@@ -361,10 +361,9 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
       // Encode input tokens using an LSTM.
       input <- encode(tokens, entityLinking)
 
-      // Must get the entity distribution over here
-
       // _ = println("parsing")
       state = SemanticParserState.start
+//      state.tokenEntityScoreMatrix = tokenEntityScoreMatrix
 
       // Choose the root type for the logical form given the
       // final output of the LSTM.
@@ -378,6 +377,7 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
       // select logical form templates to expand on typed holes
       // in the partially-generated logical form.
       expr <- parse(input, actionBuilder, state.addRootType(rootType))
+
     } yield {
       expr
     }
@@ -408,6 +408,12 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
   private def parse(input: InputEncoding, builder: RnnBuilder, prevInput: Expression, coverage: Expression,
                     rnnState: Int, state: SemanticParserState): Pnp[SemanticParserState] = {
     if (state.unfilledHoleIds.length == 0) {
+      // Token-entity distribution
+      var allEntityTypeScores = input.entityEncoding.tokenEntityScoreMatrices.values.toList
+      var tokenEntityScoreMatrix = concatenateCols(allEntityTypeScores:_*)
+      state.setAttCoverage(coverage)
+      state.setScoreMatrix(tokenEntityScoreMatrix)
+
       // If there are no holes, return the completed logical form.
       Pnp.value(state)
     } else {

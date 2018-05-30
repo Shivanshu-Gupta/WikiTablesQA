@@ -19,6 +19,25 @@ case class SemanticParserState(parts: Map[Int, ExpressionPart], unfilledHoleIds:
                                baseTemplates: List[Vector[Template]], actionScores: List[Expression],
                                entityTemplates: List[Vector[Template]], entityScores: List[Expression]) {
 
+  var attCoverage: Expression = null
+  var tokenEntityScoreMatrix: Expression = null
+
+  def setAttCoverage(attCov: Expression): Unit = {
+    this.attCoverage = attCov
+  }
+
+  def getAttCoverage(): Expression = {
+    this.attCoverage
+  }
+
+  def setScoreMatrix(scoreMatrix: Expression): Unit = {
+    this.tokenEntityScoreMatrix = scoreMatrix
+  }
+
+  def getScoreMatrix(): Expression = {
+    this.tokenEntityScoreMatrix
+  }
+
   def decodeExpression(partId: Int): Expression2 = {
     val part = parts(partId)
 

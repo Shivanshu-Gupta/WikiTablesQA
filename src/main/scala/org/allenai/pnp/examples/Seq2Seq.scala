@@ -1,8 +1,9 @@
 package org.allenai.pnp.examples
 
+import java.util
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
-
 import org.allenai.pnp.BsoTrainer
 import org.allenai.pnp.CompGraph
 import org.allenai.pnp.Env
@@ -12,12 +13,10 @@ import org.allenai.pnp.Pnp
 import org.allenai.pnp.PnpExample
 import org.allenai.pnp.PnpInferenceContext
 import org.allenai.pnp.PnpModel
-
 import com.google.common.base.Preconditions
 import com.jayantkrish.jklol.training.DefaultLogFunction
 import com.jayantkrish.jklol.training.NullLogFunction
 import com.jayantkrish.jklol.util.IndexedList
-
 import edu.cmu.dynet._
 
 /**

@@ -5,6 +5,7 @@ import scala.collection.mutable.ListBuffer
 import com.google.common.base.Preconditions
 import com.jayantkrish.jklol.training.LogFunction
 import edu.cmu.dynet._
+import org.allenai.pnp.semparse.SemanticParserState
 import org.allenai.wikitables.WikiTablesExample
 
 import scala.util.Random
@@ -23,7 +24,7 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
       log.startTimer("pp_loglikelihood")
       for ((example, wikiexample) <- Random.shuffle(examples zip wikiexamples)) {
         ComputationGraph.renew()
-//        println(wikiexample.id)
+        // println(wikiexample.id)
         val env = example.env
         val context = PnpInferenceContext.init(model).setLog(log)
 
@@ -35,7 +36,47 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
         
         log.startTimer("pp_loglikelihood/build_loss")
         val exLosses = conditional.executions.map(_.env.getScore)
-//        println(exLosses.length)
+
+        val states = conditional.executions.map(_.value.asInstanceOf[SemanticParserState])
+        val covs = states.map(_.getAttCoverage())
+        val scores = states.map(_.getScoreMatrix())
+        // KL Divergence
+//        val probScore = Expression.transpose(Expression.softmax(Expression.transpose(score)))
+        val probScores = for{
+          score <- scores
+        } yield {
+          Expression.transpose(Expression.softmax(Expression.transpose(score)))
+        }
+
+//        val logProbScore = Expression.log(probScore)
+        val logProbScores = for{
+          probScore <- probScores
+        } yield {
+          Expression.log(probScore)
+        }
+
+//        val prodScore = Expression.cmult(probScore, logProbScore)
+        val prodScores = for{
+          (probScore, logProbScore) <- probScores zip logProbScores
+        } yield {
+          Expression.cmult(probScore, logProbScore)
+        }
+
+//        val imp = Expression.sumCols(prodScore)
+        val impScores = for{
+          prodScore <- prodScores
+        } yield {
+          Expression.sumCols(prodScore)
+        }
+
+        println("Dummy")
+
+        val coverage = for{
+          (impScore, cov) <- impScores zip covs
+        }  yield {
+          Expression.cmult(Expression.rectify(impScore - Expression.averageCols(Expression.transpose(impScore))), cov)
+        }
+
         val logProbExpr = if (exLosses.isEmpty) {
           Preconditions.checkState(sumMultipleExecutions,
             "Found %s conditional executions (expected exactly 1) for example: %s",
@@ -46,13 +87,14 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
           exLosses(0)
         } else {
           // This flag is used to ensure that training with a
-          // single label per example doesn't work "by accident" 
+          // single label per example doesn't work "by accident"
           // with an execution score that permits multiple labels.
           Preconditions.checkState(sumMultipleExecutions,
             "Found %s conditional executions (expected exactly 1) for example: %s",
             conditional.executions.size.asInstanceOf[AnyRef], example)
 
-          Expression.logSumExp(new ExpressionVector(exLosses))
+//          Expression.logSumExp(new ExpressionVector(exLosses))
+          Expression.sum(Expression.logSumExp(new ExpressionVector(exLosses)),0.01f * Expression.sumRows(Expression.sum(impScores:_*)))
         }
         log.stopTimer("pp_loglikelihood/build_loss")
 
@@ -67,7 +109,8 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
           ComputationGraph.backward(lossExpr)
           trainer.update(1.0f)
           log.stopTimer("pp_loglikelihood/backward")
-        } else {
+        }
+        else {
           searchErrors += 1
         }
       }

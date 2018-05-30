@@ -1,5 +1,9 @@
 package org.allenai.pnp
 
+import java.util.regex.Pattern
+
+import java.util.List
+import java.util.ArrayList
 import ExecutionScore.ExecutionScore
 
 /** A training example for neural probabilistic programs. An example
@@ -9,7 +13,7 @@ import ExecutionScore.ExecutionScore
   * of conditional executions during inference.
   */
 case class PnpExample[A](unconditional: Pnp[A], conditional: Pnp[A],
-    env: Env, conditionalExecutionScore: ExecutionScore) {
+    env: Env, conditionalExecutionScore: ExecutionScore, words: List[String] = null) {
 }
 
 object PnpExample {
