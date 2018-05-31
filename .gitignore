@@ -41,5 +41,5 @@ lib/stanford-corenlp-*models.jar
 .DS_Store
 
 # logs
-experiments/wikitables/output/
+experiments/wikitables/output
 
