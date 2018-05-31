@@ -431,17 +431,37 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
       // Update the LSTM and use its output to score
       // the applicable templates.
       // println("lstm add input")
-      val rnnOutput = builder.addInput(rnnState, prevInput)
-      val rnnOutputDropout = if (dropoutProb > 0.0) {
-        Expression.dropout(rnnOutput, dropoutProb.asInstanceOf[Float])
-      } else {
-        rnnOutput
-      }
-      val nextRnnState = builder.state
+//      val rnnOutput = builder.addInput(rnnState, prevInput)
+//      val rnnOutputDropout = if (dropoutProb > 0.0) {
+//        Expression.dropout(rnnOutput, dropoutProb.asInstanceOf[Float])
+//      } else {
+//        rnnOutput
+//      }
+//      val nextRnnState = builder.state
       // println("computing attention")
       for {
         // Compute an attention vector
         attentionWeights <- Pnp.param(SemanticParser.ATTENTION_WEIGHTS_PARAM)
+        hiddenAttentionWeights <- Pnp.param(SemanticParser.HIDDEN_ATTENTION_WEIGHTS_PARAM)
+        decoderLayerWeights <- Pnp.param(SemanticParser.DECODER_LAYER_WEIGHTS)
+
+        hiddenWordAttentions = Expression.transpose(
+          Expression.softmax(input.encodedTokenMatrix * hiddenAttentionWeights * concatenateArray(Array(builder.getS(rnnState)(0), builder.getH(rnnState)(0)))))
+        hiddenAttentionVector = Expression.transpose(hiddenWordAttentions * input.encodedTokenMatrix)
+        attInput = concatenateArray(Array(prevInput, hiddenAttentionVector))
+
+        rnnOutput1 = builder.addInput(rnnState, attInput)
+//        builder.getHead()
+        hiddenStates = builder.getH(builder.state)
+        rnnOutput = Expression.exprTimes(Expression.concatenateCols(hiddenStates), decoderLayerWeights)
+
+        rnnOutputDropout = if (dropoutProb > 0.0) {
+          Expression.dropout(rnnOutput, dropoutProb.asInstanceOf[Float])
+        } else {
+          rnnOutput
+        }
+        nextRnnState = builder.state
+
         wordAttentions = Expression.transpose(
           Expression.softmax(input.encodedTokenMatrix * attentionWeights * rnnOutputDropout))
 
@@ -522,7 +542,8 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
 
         actionLstmInputWeights <- Pnp.param(SemanticParser.ACTION_LSTM_INPUT_WEIGHTS)
         actionLstmInputBias <- Pnp.param(SemanticParser.ACTION_LSTM_INPUT_BIAS)
-        lstmInput1 = concatenateArray(Array(actionInput, attentionVector))
+//        lstmInput1 = concatenateArray(Array(actionInput, attentionVector))
+        lstmInput1 = actionInput
         lstmInput2 = if (config.actionLstmHiddenLayer) {
           val hidden = (actionLstmInputWeights * lstmInput1) + actionLstmInputBias
           if (config.relu) {
@@ -804,6 +825,9 @@ class SemanticParserConfig extends Serializable {
   var encodeEntitiesWithGraph = false
   var distinctUnkVectors = false
 
+  var encoderNumLayers = 1
+  var decoderNumLayers = 1
+
   // XXX: I'm not sure if these really belong here, but we want to serialize
   // them with the parser.
   var preprocessor: LfPreprocessor = null
@@ -821,6 +845,10 @@ object SemanticParser {
   val ACTION_LOOKUP_PARAM = "actionLookup:"
 
   val ATTENTION_WEIGHTS_PARAM = "attentionWeights:"
+  val HIDDEN_ATTENTION_WEIGHTS_PARAM = "hiddenAttentionWeights:"
+
+  val DECODER_LAYER_WEIGHTS = "decoderLayerWeights:"
+  val ENCODER_LAYER_WEIGHTS = "encoderLayerWieghts:"
 
   val ACTION_HIDDEN_WEIGHTS = "actionHidden"
   val ACTION_HIDDEN_BIAS = "actionHiddenBias"
@@ -862,6 +890,9 @@ object SemanticParser {
     model.addParameter(ROOT_WEIGHTS_PARAM, Dim(actionSpace.rootTypes.length, 2 * config.hiddenDim))
     model.addParameter(ROOT_BIAS_PARAM, Dim(actionSpace.rootTypes.length))
     model.addParameter(ATTENTION_WEIGHTS_PARAM, Dim(2 * config.hiddenDim, actionLstmHiddenDim))
+    model.addParameter(HIDDEN_ATTENTION_WEIGHTS_PARAM, Dim(2 * config.hiddenDim, 2 * actionLstmHiddenDim))
+    model.addParameter(DECODER_LAYER_WEIGHTS, Dim(config.decoderNumLayers))
+    model.addParameter(ENCODER_LAYER_WEIGHTS, Dim(config.encoderNumLayers))
 
     model.addParameter(ACTION_HIDDEN_WEIGHTS, Dim(config.actionHiddenDim,
         2 * config.hiddenDim + actionLstmHiddenDim))
@@ -895,7 +926,8 @@ object SemanticParser {
       val actions = actionSpace.getTemplates(t)
       val dim = actions.length + config.maxVars
 
-      model.addParameter(BEGIN_ACTIONS + t, Dim(config.actionDim + 2 * config.hiddenDim))
+//      model.addParameter(BEGIN_ACTIONS + t, Dim(config.actionDim + 2 * config.hiddenDim))
+      model.addParameter(BEGIN_ACTIONS + t, Dim(config.actionDim))
       model.addLookupParameter(ACTION_LOOKUP_PARAM + t, dim, Dim(config.actionDim))
       model.addParameter(ACTION_HIDDEN_ACTION + t, Dim(dim, config.actionHiddenDim))
       model.addParameter(ACTION_HIDDEN_ACTION_BIAS + t, Dim(dim))
@@ -922,10 +954,10 @@ object SemanticParser {
     }
 
     // Forward and backward RNNs for encoding the input token sequence
-    val forwardBuilder = new LstmBuilder(1, config.lstmInputDim, config.hiddenDim, model.model)
-    val backwardBuilder = new LstmBuilder(1, config.lstmInputDim, config.hiddenDim, model.model)
+    val forwardBuilder = new LstmBuilder(config.encoderNumLayers, config.lstmInputDim, config.hiddenDim, model.model)
+    val backwardBuilder = new LstmBuilder(config.encoderNumLayers, config.lstmInputDim, config.hiddenDim, model.model)
     // RNN for generating actions given previous actions (and the input)
-    val actionBuilder = new LstmBuilder(1, actionLstmInputDim,
+    val actionBuilder = new LstmBuilder(config.decoderNumLayers, actionLstmInputDim,
         actionLstmHiddenDim, model.model)
 
     new SemanticParser(actionSpace, vocab, config, forwardBuilder,

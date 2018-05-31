@@ -69,6 +69,9 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   var actionHiddenDimOpt: OptionSpec[Integer] = null
   var encodeEntitiesWithGraphOpt: OptionSpec[Void] = null
 
+  var encoderNumLayersOpt: OptionSpec[Integer] = null
+  var decoderNumLayersOpt: OptionSpec[Integer] = null
+
   var maxDerivationsOpt: OptionSpec[Integer] = null
   var vocabThreshold: OptionSpec[Integer] = null  
   var epochsOpt: OptionSpec[Integer] = null
@@ -110,6 +113,9 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     actionDimOpt = parser.accepts("actionDim").withRequiredArg().ofType(classOf[Integer]).defaultsTo(100)
     actionHiddenDimOpt = parser.accepts("actionHiddenDim").withRequiredArg().ofType(classOf[Integer]).defaultsTo(100)
     encodeEntitiesWithGraphOpt = parser.accepts("encodeEntitiesWithGraph")
+
+    encoderNumLayersOpt = parser.accepts("encoderLayers").withRequiredArg().ofType(classOf[Integer]).defaultsTo(1)
+    decoderNumLayersOpt = parser.accepts("decoderLayers").withRequiredArg().ofType(classOf[Integer]).defaultsTo(1)
 
     maxDerivationsOpt = parser.accepts("maxDerivations").withRequiredArg().ofType(classOf[Integer]).defaultsTo(-1)
     // A word must appear *strictly more* times than this threshold to be included
@@ -254,6 +260,9 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     config.featureGenerator = Some(featureGenerator)
     config.entityLinkingLearnedSimilarity = !options.has(noEntityLinkingSimilarityOpt)
     config.encodeEntitiesWithGraph = options.has(encodeEntitiesWithGraphOpt)
+
+    config.decoderNumLayers = options.valueOf(decoderNumLayersOpt)
+    config.encoderNumLayers = options.valueOf(encoderNumLayersOpt)
     // TODO: turn back on.
     config.encodeWithSoftEntityLinking = false
     config.distinctUnkVectors = true
@@ -266,6 +275,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     config.preprocessor = lfPreprocessor
     config.typeDeclaration = typeDeclaration
     val parser = SemanticParser.create(actionSpace, vocab, wordEmbeddings, config, model)
+
+
 
     if (!options.has(skipActionSpaceValidationOpt)) {
       val trainSeparatedLfs = getCcgDataset(trainingData)
