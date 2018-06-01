@@ -157,8 +157,7 @@ public class WikiTablesDataProcessor {
             writer = new BufferedWriter(new OutputStreamWriter(
                 new GZIPOutputStream(new FileOutputStream(outFile))));
           }
-          Set<Formula> subparts = new HashSet<>();
-          Formula origFormula = null;
+
           while ((line = reader.readLine()) != null) {
             Formula f = null;
             if(! line.trim().isEmpty()){
@@ -168,34 +167,35 @@ public class WikiTablesDataProcessor {
                 System.out.println("Exception occured while parsing "+line);
               }
             }
-            if(mode == 1){
+            if(mode == 0){
+              correctFormulas.add(f);
+            } else if(mode == 1){
               Set<String> subparts_str = Formulas.extractSubparts(f);
               writer.write("Orig\t"+f+"\n");
               for(String s: subparts_str){
                 writer.write(s+"\n");
               }
               writer.write("\n");
-              continue;
-            }
-            if(mode == 2){
+            } else if(mode == 2){
+              List<Formula> subparts = new ArrayList<>();
+              Formula origFormula = null;
               if(! line.trim().isEmpty()){
                 if(line.contains("Orig\t")){
                   origFormula = Formula.fromString(line.split("\t")[1]);
-                  continue;
+                } else {
+                  subparts.add(f);
                 }
-                subparts.add(f);
-                continue;
-              }
-              List<Pair<Value, Formula>> subValues = new ArrayList<>();
-              Formula matchingForumla = null;
-              Value matchingValue = null;
-              for(Formula subF: subparts){
-                Value subValue = executeFormula(subF, ex.context, builder);
-                if(subValue instanceof ErrorValue || subValue instanceof InfiniteListValue){
-                  continue;
-                }
+              } else {
+                List<Pair<Value, Formula>> subValues = new ArrayList<>();
+                Formula matchingForumla = null;
+                Value matchingValue = null;
+                for(Formula subF: subparts){
+                  Value subValue = executeFormula(subF, ex.context, builder);
+                  if(subValue instanceof ErrorValue || subValue instanceof InfiniteListValue){
+                    continue;
+                  }
 
-                for(Pair<Value, Formula> p: subValues){
+                  for(Pair<Value, Formula> p: subValues){
                     Value subValuePrev = p.getFirst();
                     Formula subFPrev = p.getSecond();
                     double res = builder.valueEvaluator.getCompatibility(subValue, subValuePrev);
@@ -204,23 +204,21 @@ public class WikiTablesDataProcessor {
                       matchingValue = subValuePrev;
                       break;
                     }
+                  }
+                  if(matchingForumla != null){
+                    System.out.println("Skipping Formula : "+origFormula);
+                    System.out.println("Mathing Formulas : ");
+                    System.out.println("1. "+subF+", value= "+subValue);
+                    System.out.println("2. "+matchingForumla+", value= "+matchingValue);
+                    break;
+                  }
+                  subValues.add(new Pair(subValue, subF));
                 }
-                if(matchingForumla != null){
-                  System.out.println("Skipping Formula : "+origFormula);
-                  System.out.println("Mathing Formulas : ");
-                  System.out.println("1. "+subF+", value= "+subValue);
-                  System.out.println("2. "+matchingForumla+", value= "+matchingValue);
-                  break;
+                if(matchingForumla == null){
+                  writer.write(origFormula+"\n");
                 }
-                subValues.add(new Pair(subValue, subF));
               }
-              subparts = new HashSet<Formula>();
-              if(matchingForumla == null){
-                writer.write(origFormula+"\n");
-              }
-            }
-            if(mode == 0){
-              correctFormulas.add(f);
+
             }
           }
           writer.close();
