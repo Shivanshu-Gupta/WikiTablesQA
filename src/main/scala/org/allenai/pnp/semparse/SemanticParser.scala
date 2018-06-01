@@ -432,7 +432,10 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
       // Update the LSTM and use its output to score
       // the applicable templates.
       // println("lstm add input")
-      val rnnOutput = builder.addInput(rnnState, concatenateArray(Array(prevInput, hole.parentState)))
+      val lstmInput = ListBuffer[Expression]()
+      if(!config.ignorePrevious) lstmInput.append(prevInput)
+      if(config.useParent != "") lstmInput.append(hole.parentInput)
+      val rnnOutput = builder.addInput(rnnState, concatenateArray(lstmInput.toArray))
       val rnnOutputDropout = if (dropoutProb > 0.0) {
         Expression.dropout(rnnOutput, dropoutProb.asInstanceOf[Float])
       } else {
@@ -574,12 +577,12 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
         } else {
           lstmInput1
         }
-        parentState = ListBuffer[Expression]()
+        parentInput = ListBuffer[Expression]()
         parentParts = config.useParent.split('-').toSet
-        _ = if(parentParts.contains("hidden")) parentState.append(Expression.concatenate(builder.getH(nextRnnState)))
-        _ = if(parentParts.contains("action")) parentState.append(actionInput)
-        _ = if(parentParts.contains("attention")) parentState.append(attentionVector)
-        nextState = templateTuple._1.apply(state, concatenateArray(parentState.toArray)).addAttention(wordAttentions)
+        _ = if(parentParts.contains("hidden")) parentInput.append(Expression.concatenate(builder.getH(nextRnnState)))
+        _ = if(parentParts.contains("action")) parentInput.append(actionInput)
+        _ = if(parentParts.contains("attention")) parentInput.append(attentionVector)
+        nextState = templateTuple._1.apply(state, concatenateArray(parentInput.toArray)).addAttention(wordAttentions)
           .addActionScores(baseTemplates, actionScores).addEntityScores(entityTemplates.toVector, entityScores)
 
         // _ = println("recursing")
@@ -847,6 +850,7 @@ class SemanticParserConfig extends Serializable {
   var featureMlpDim = 50
 
   // added by Shivanshu
+  var ignorePrevious = true
   var useParent = ""
   var coverage = false
   var attentionAggregation = "all"
@@ -920,14 +924,18 @@ object SemanticParser {
       config.hiddenDim
     }
 
-    var parentStateDim = 0
+    var parentInputDim = 0
     val parentParts = config.useParent.split('-').toSet
-    if(parentParts.contains("hidden")) parentStateDim += actionLstmHiddenDim
-    if(parentParts.contains("action")) parentStateDim += config.actionDim
-    if(parentParts.contains("attention")) parentStateDim += 2 * config.hiddenDim
-    model.addParameter(ROOT_PARENT_STATE, Dim(parentStateDim))
+    if(parentParts.contains("hidden")) parentInputDim += actionLstmHiddenDim
+    if(parentParts.contains("action")) parentInputDim += config.actionDim
+    if(parentParts.contains("attention")) parentInputDim += 2 * config.hiddenDim
+    model.addParameter(ROOT_PARENT_STATE, Dim(parentInputDim))
 
-    val actionLstmInputDim = config.actionDim + 2 * config.hiddenDim + parentStateDim
+    val actionLstmInputDim = if(config.ignorePrevious) {
+      config.actionDim + 2 * config.hiddenDim + parentInputDim
+    } else {
+      parentInputDim
+    }
 
     // Initialize model
     // TODO: document these parameters.

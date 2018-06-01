@@ -143,4 +143,4 @@ case class ExpressionPart(val expr: Expression2,
   }
 }
 
-case class Hole(id: Int, t: Type, scope: Scope, repeated: Boolean, parentState: Expression = null)
+case class Hole(id: Int, t: Type, scope: Scope, repeated: Boolean, parentInput: Expression = null)

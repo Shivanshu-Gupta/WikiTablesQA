@@ -92,6 +92,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   var templateTypeSelectionOpt: OptionSpec[String] = null
   var optimizerOpt: OptionSpec[String] = null
   var useParentOpt: OptionSpec[String] = null
+  var ignorePreviousOpt: OptionSpec[Void] = null
 
   var skipActionSpaceValidationOpt: OptionSpec[Void] = null
   var trainOnAnnotatedLfsOpt: OptionSpec[Void] = null
@@ -111,7 +112,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     modelOutputOpt = parser.accepts("modelOut").withRequiredArg().ofType(classOf[String]).required()
     modelOutputDirOpt = parser.accepts("modelDir").withRequiredArg().ofType(classOf[String])
     wordEmbeddingsOpt = parser.accepts("wordEmbeddings").withRequiredArg().ofType(classOf[String])
-    
+
     inputDimOpt = parser.accepts("inputDim").withRequiredArg().ofType(classOf[Integer]).defaultsTo(200)
     hiddenDimOpt = parser.accepts("hiddenDim").withRequiredArg().ofType(classOf[Integer]).defaultsTo(100)
     actionDimOpt = parser.accepts("actionDim").withRequiredArg().ofType(classOf[Integer]).defaultsTo(100)
@@ -142,6 +143,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     templateTypeSelectionOpt = parser.accepts("templateTypeSelection").withRequiredArg().ofType(classOf[String]).defaultsTo("")
     optimizerOpt = parser.accepts("optimizer").withRequiredArg().ofType(classOf[String]).defaultsTo("sgd:e0=0.1:edecay=0.001")
     useParentOpt = parser.accepts("useParent").withRequiredArg().ofType(classOf[String]).defaultsTo("")
+    ignorePreviousOpt = parser.accepts("ignorePrevious")
 
     skipActionSpaceValidationOpt = parser.accepts("skipActionSpaceValidation")
     trainOnAnnotatedLfsOpt = parser.accepts("trainOnAnnotatedLfs")
@@ -183,7 +185,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     // Eliminate those examples that Sempre did not find correct logical forms for,
     // and preprocess the remaining
     val filteredTrainingData = trainingData.filter(!_.ex.logicalForms.isEmpty)
-        
+
     // preprocessExample modifies the `annotations` data structure in example.sentence, adding
     // some things to it.  We don't need a `map`, just a `foreach`.
     filteredTrainingData.foreach(x => preprocessExample(x, parserVocab, featureGenerator,
@@ -229,7 +231,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     } else {
       new NullLfPreprocessor()
     }
-    
+
     val wordEmbeddings = if (options.has(wordEmbeddingsOpt)) {
       Some(readWordEmbeddings(options.valueOf(wordEmbeddingsOpt)))
     } else {
@@ -252,7 +254,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
       SemanticParserUtils.validateTypes(lf, typeDeclaration))
 
     // Combine applications makes templates like <t> -> (f <x> <y>)
-    // where f is a constant and <.> is a type. This is necessary 
+    // where f is a constant and <.> is a type. This is necessary
     // to replicate a seq2tree / seq2seq model given the lf preprocessing
     val combineApplications = options.has(seq2TreeOpt) || options.has(seq2SeqOpt)
     val actionSpace = getActionSpace(wellTypedTrainingLfs, typeDeclaration, combineApplications)
@@ -277,6 +279,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     config.featureMlp = options.has(entityLinkingMlpOpt)
 
     // added by Shivanshu
+    config.ignorePrevious = options.has(ignorePreviousOpt)
     config.useParent = options.valueOf(useParentOpt)
     config.coverage = options.has(coverageOpt)
     config.templateTypeSelection = options.valueOf(templateTypeSelectionOpt)
