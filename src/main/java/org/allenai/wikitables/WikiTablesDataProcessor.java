@@ -126,8 +126,8 @@ public class WikiTablesDataProcessor {
     }
     Builder builder = getSempreBuilder(100);
     // int mode = 0; // Original
-    // int mode = 1; // Print subparts
-    int mode = 2; // Prune logical forms based on sub part execution, change the jar files to original
+    // int mode = 1; // Print subparts, change the jar files to .new and recompile
+    int mode = 2; // Prune logical forms based on sub part execution, change the jar files to .orig and recompile
 
     for (CustomExample ex: dataset) {
       String exId = ex.getId();
@@ -323,8 +323,8 @@ public class WikiTablesDataProcessor {
     TableValuePreprocessor targetPreprocessor = new TableValuePreprocessor();
     // ksk changed: added null
 
-    // target = targetPreprocessor.preprocess(target, null);
-    target = targetPreprocessor.preprocess(target);
+    // target = targetPreprocessor.preprocess(target, null); // mode = 1
+    target = targetPreprocessor.preprocess(target); // mode = 2
     // Print the predicted and target values.
     // System.out.println(pred + " " + targetValue);
 
