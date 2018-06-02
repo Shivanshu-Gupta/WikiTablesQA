@@ -51,6 +51,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
 
   import WikiTablesUtil._
 
+  var randomSeedOpt: OptionSpec[Long] = null
   var trainingDataOpt: OptionSpec[String] = null
   var devDataOpt: OptionSpec[String] = null
   // Path to the directory containing the correct logical forms
@@ -98,6 +99,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   val logicalFormParser = ExpressionParser.expression2()
 
   override def initializeOptions(parser: OptionParser): Unit = {
+    randomSeedOpt = parser.accepts("randomSeed").withRequiredArg().ofType(classOf[Long]).defaultsTo(2732932987L)
     trainingDataOpt = parser.accepts("trainingData").withRequiredArg().ofType(classOf[String]).withValuesSeparatedBy(',').required()
     devDataOpt = parser.accepts("devData").withRequiredArg().ofType(classOf[String]).withValuesSeparatedBy(',')
     derivationsPathOpt = parser.accepts("derivationsPath").withRequiredArg().ofType(classOf[String])
@@ -200,7 +202,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   }
 
   override def run(options: OptionSet): Unit = {
-    Initialize.initialize(Map("dynet-mem" -> "4096", "random-seed" -> 1442801015L))
+    Initialize.initialize(Map("dynet-mem" -> "4096", "random-seed" -> options.valueOf(randomSeedOpt)))
  
     val typeDeclaration = if (options.has(seq2TreeOpt)) {
       new Seq2TreeTypeDeclaration()
