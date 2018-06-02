@@ -91,8 +91,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   var coverageOpt: OptionSpec[Void] = null
   var templateTypeSelectionOpt: OptionSpec[String] = null
   var optimizerOpt: OptionSpec[String] = null
-  var useParentOpt: OptionSpec[String] = null
-  var ignorePreviousOpt: OptionSpec[Void] = null
+  var useParentInputOpt: OptionSpec[String] = null
+  var useParentRnnStateOpt: OptionSpec[Void] = null
 
   var skipActionSpaceValidationOpt: OptionSpec[Void] = null
   var trainOnAnnotatedLfsOpt: OptionSpec[Void] = null
@@ -142,8 +142,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     coverageOpt = parser.accepts("coverage")
     templateTypeSelectionOpt = parser.accepts("templateTypeSelection").withRequiredArg().ofType(classOf[String]).defaultsTo("")
     optimizerOpt = parser.accepts("optimizer").withRequiredArg().ofType(classOf[String]).defaultsTo("sgd:e0=0.1:edecay=0.001")
-    useParentOpt = parser.accepts("useParent").withRequiredArg().ofType(classOf[String]).defaultsTo("")
-    ignorePreviousOpt = parser.accepts("ignorePrevious")
+    useParentInputOpt = parser.accepts("useParentInput").withRequiredArg().ofType(classOf[String]).defaultsTo("")
+    useParentRnnStateOpt = parser.accepts("useParentRnnState")
 
     skipActionSpaceValidationOpt = parser.accepts("skipActionSpaceValidation")
     trainOnAnnotatedLfsOpt = parser.accepts("trainOnAnnotatedLfs")
@@ -279,8 +279,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     config.featureMlp = options.has(entityLinkingMlpOpt)
 
     // added by Shivanshu
-    config.ignorePrevious = options.has(ignorePreviousOpt)
-    config.useParent = options.valueOf(useParentOpt)
+    config.useParentRnnState = options.has(useParentRnnStateOpt)
+    config.useParentInput = options.valueOf(useParentInputOpt)
     config.coverage = options.has(coverageOpt)
     config.templateTypeSelection = options.valueOf(templateTypeSelectionOpt)
 

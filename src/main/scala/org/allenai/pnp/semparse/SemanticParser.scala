@@ -370,12 +370,12 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
       rootBias <- Pnp.param(SemanticParser.ROOT_BIAS_PARAM)
       rootScores = (rootWeights * input.sentEmbedding) + rootBias
       rootType <- Pnp.choose(actionSpace.rootTypes, rootScores, state)
-      rootParentState <- Pnp.param(SemanticParser.ROOT_PARENT_STATE)
+      rootParentInput <- Pnp.param(SemanticParser.ROOT_PARENT_INPUT)
       // _ = println("parsing 2")
       // Recursively generate a logical form using an LSTM to
       // select logical form templates to expand on typed holes
       // in the partially-generated logical form.
-      expr <- parse(input, actionBuilder, state.addRootType(rootType, rootParentState))
+      expr <- parse(input, actionBuilder, state.addRootType(rootType, rootParentInput))
     } yield {
       expr
     }
@@ -432,18 +432,37 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
       // Update the LSTM and use its output to score
       // the applicable templates.
       // println("lstm add input")
-      val lstmInput = ListBuffer[Expression]()
-      if(!config.ignorePrevious) lstmInput.append(prevInput)
-      if(config.useParent != "") lstmInput.append(hole.parentInput)
-      val rnnOutput = builder.addInput(rnnState, concatenateArray(lstmInput.toArray))
-      val rnnOutputDropout = if (dropoutProb > 0.0) {
-        Expression.dropout(rnnOutput, dropoutProb.asInstanceOf[Float])
+      val lstmInput1 = if(config.useParentInput != "") {
+        concatenateArray(Array(prevInput, hole.parentInput))
       } else {
-        rnnOutput
+        concatenateArray(Array(prevInput))
       }
-      val nextRnnState = builder.state
-      // println("computing attention")
       for {
+        actionLstmInputWeights <- Pnp.param(SemanticParser.ACTION_LSTM_INPUT_WEIGHTS)
+        actionLstmInputBias <- Pnp.param(SemanticParser.ACTION_LSTM_INPUT_BIAS)
+        lstmInput2 = if (config.actionLstmHiddenLayer) {
+            val hidden = (actionLstmInputWeights * lstmInput1) + actionLstmInputBias
+            if (config.relu) {
+              Expression.rectify(hidden)
+            } else {
+              Expression.tanh(hidden)
+            }
+          } else {
+          lstmInput1
+        }
+        rnnOutput = if(config.useParentRnnState && hole.parentState != 0) {
+          builder.addInput(hole.parentState, lstmInput2)
+        } else {
+          builder.addInput(rnnState, lstmInput2)
+        }
+        rnnOutputDropout = if (dropoutProb > 0.0) {
+          Expression.dropout(rnnOutput, dropoutProb.asInstanceOf[Float])
+        } else {
+          rnnOutput
+        }
+        nextRnnState = builder.state
+        // println("computing attention")
+
         // Compute an attention vector
         cg <- Pnp.computationGraph()
         attentionWeights <- Pnp.param(SemanticParser.ATTENTION_WEIGHTS_PARAM)
@@ -564,30 +583,19 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
           Expression.lookup(entityLookup, 0)
         }
 
-        actionLstmInputWeights <- Pnp.param(SemanticParser.ACTION_LSTM_INPUT_WEIGHTS)
-        actionLstmInputBias <- Pnp.param(SemanticParser.ACTION_LSTM_INPUT_BIAS)
-        lstmInput1 = concatenateArray(Array(actionInput, attentionVector))
-        lstmInput2 = if (config.actionLstmHiddenLayer) {
-          val hidden = (actionLstmInputWeights * lstmInput1) + actionLstmInputBias
-          if (config.relu) {
-            Expression.rectify(hidden)
-          } else {
-            Expression.tanh(hidden)
-          }
-        } else {
-          lstmInput1
-        }
+        lstmInput = concatenateArray(Array(actionInput, attentionVector))
+
         parentInput = ListBuffer[Expression]()
-        parentParts = config.useParent.split('-').toSet
+        parentParts = config.useParentInput.split('-').toSet
         _ = if(parentParts.contains("hidden")) parentInput.append(Expression.concatenate(builder.getH(nextRnnState)))
         _ = if(parentParts.contains("action")) parentInput.append(actionInput)
         _ = if(parentParts.contains("attention")) parentInput.append(attentionVector)
-        nextState = templateTuple._1.apply(state, concatenateArray(parentInput.toArray)).addAttention(wordAttentions)
+        nextState = templateTuple._1.apply(state, concatenateArray(parentInput.toArray), nextRnnState).addAttention(wordAttentions)
           .addActionScores(baseTemplates, actionScores).addEntityScores(entityTemplates.toVector, entityScores)
 
         // _ = println("recursing")
         // Recursively fill in any remaining holes.
-        returnState <- parse(input, builder, lstmInput2, nextCoverage, nextRnnState, nextState)
+        returnState <- parse(input, builder, lstmInput, nextCoverage, nextRnnState, nextState)
       } yield {
         returnState
       }
@@ -638,7 +646,7 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
       }
 
       val theMatch = matches.toList(0)
-      state = theMatch.apply(state, null)
+      state = theMatch.apply(state)
 
       actionTypes += curType
       actions += theMatch
@@ -850,8 +858,8 @@ class SemanticParserConfig extends Serializable {
   var featureMlpDim = 50
 
   // added by Shivanshu
-  var ignorePrevious = true
-  var useParent = ""
+  var useParentRnnState = false
+  var useParentInput = ""
   var coverage = false
   var attentionAggregation = "all"
   var templateTypeSelection = ""
@@ -876,7 +884,7 @@ object SemanticParser {
   val ROOT_BIAS_PARAM = "rootBias"
 
   // added for parent input to first lstm state
-  val ROOT_PARENT_STATE = "rootInput:"
+  val ROOT_PARENT_INPUT = "rootInput:"
 
   val BEGIN_ACTIONS = "beginActions:"
   val ACTION_LOOKUP_PARAM = "actionLookup:"
@@ -925,17 +933,13 @@ object SemanticParser {
     }
 
     var parentInputDim = 0
-    val parentParts = config.useParent.split('-').toSet
+    val parentParts = config.useParentInput.split('-').toSet
     if(parentParts.contains("hidden")) parentInputDim += actionLstmHiddenDim
     if(parentParts.contains("action")) parentInputDim += config.actionDim
     if(parentParts.contains("attention")) parentInputDim += 2 * config.hiddenDim
-    model.addParameter(ROOT_PARENT_STATE, Dim(parentInputDim))
+    model.addParameter(ROOT_PARENT_INPUT, Dim(parentInputDim))
 
-    val actionLstmInputDim = if(config.ignorePrevious) {
-      config.actionDim + 2 * config.hiddenDim + parentInputDim
-    } else {
-      parentInputDim
-    }
+    val actionLstmInputDim = config.actionDim + 2 * config.hiddenDim + parentInputDim
 
     // Initialize model
     // TODO: document these parameters.
