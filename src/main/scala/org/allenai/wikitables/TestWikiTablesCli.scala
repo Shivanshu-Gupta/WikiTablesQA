@@ -34,7 +34,8 @@ import fig.basic.LispTree
 class TestWikiTablesCli extends AbstractCli() {
   
   import TestWikiTablesCli._
-
+  
+  var randomSeedOpt: OptionSpec[Long] = null
   var testDataOpt: OptionSpec[String] = null
   var derivationsPathOpt: OptionSpec[String] = null
   var noDerivationsOpt: OptionSpec[Void] = null
@@ -52,6 +53,7 @@ class TestWikiTablesCli extends AbstractCli() {
   var numAnswersOpt: OptionSpec[Integer] = null
 
   override def initializeOptions(parser: OptionParser): Unit = {
+    randomSeedOpt = parser.accepts("randomSeed").withRequiredArg().ofType(classOf[Long]).defaultsTo(2732932987L)
     testDataOpt = parser.accepts("testData").withRequiredArg().ofType(classOf[String]).withValuesSeparatedBy(',')
     derivationsPathOpt = parser.accepts("derivationsPath").withRequiredArg().ofType(classOf[String])
     noDerivationsOpt = parser.accepts("noDerivations")
@@ -69,7 +71,7 @@ class TestWikiTablesCli extends AbstractCli() {
   }
 
   override def run(options: OptionSet): Unit = {
-    Initialize.initialize(Map("dynet-mem" -> "4096", "random-seed" -> 1442801015L))
+    Initialize.initialize(Map("dynet-mem" -> "4096", "random-seed" -> options.valueOf(randomSeedOpt)))
 
     // Get the predicted denotations of each model. (and print out 
     // error analysis)
