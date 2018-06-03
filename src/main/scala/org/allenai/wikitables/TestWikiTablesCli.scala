@@ -36,7 +36,7 @@ import scala.io.Source
 class TestWikiTablesCli extends AbstractCli() {
   
   import TestWikiTablesCli._
-  
+
   var randomSeedOpt: OptionSpec[Long] = null
   var testDataOpt: OptionSpec[String] = null
   var derivationsPathOpt: OptionSpec[String] = null
