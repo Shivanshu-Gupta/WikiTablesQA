@@ -2,12 +2,10 @@ package org.allenai.pnp.semparse
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
-
 import com.jayantkrish.jklol.ccg.lambda.Type
 import com.jayantkrish.jklol.ccg.lambda2.Expression2
 import com.jayantkrish.jklol.ccg.lambda2.StaticAnalysis
-
-import edu.cmu.dynet.Expression
+import edu.cmu.dynet.{Expression, LookupParameter}
 
 /** Template represents an action that expands a type
   * to an expression. The expression itself may contain
@@ -50,7 +48,7 @@ case class ApplicationTemplate(val root: Type, val expr: Expression2,
     val filled = state.nextHole().get
     val holeScope = filled.scope
     val part = ExpressionPart(expr, holeIndexes.toArray, holeIds.toArray)
-    val newHoles = holeIds.zip(holes).map(x => Hole(x._1, x._2._2, holeScope, x._2._3, parentInput, parentState))
+    val newHoles = holeIds.zip(holes).zipWithIndex.map(x => Hole(x._1._1, x._1._2._2, holeScope, x._1._2._3, parentInput, parentState, x._2))
     
     state.fill(filled, part, newHoles.toList, this)
   } 
@@ -146,7 +144,7 @@ case class LambdaTemplate(val root: Type, val args: List[Type], val body: Type) 
 
     val part = ExpressionPart(expr, Array(hole), Array(holeId))
     
-    state.fill(filled, part, List(Hole(holeId, body, nextScope, false, parentInput, parentState)), this)
+    state.fill(filled, part, List(Hole(holeId, body, nextScope, false, parentInput, parentState, 0)), this)
   }
 
   override def matches(expIndex: Int, exp: Expression2, typeMap: Map[Integer, Type]): Boolean = {

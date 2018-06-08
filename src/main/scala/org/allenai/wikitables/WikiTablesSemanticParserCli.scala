@@ -93,6 +93,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   var optimizerOpt: OptionSpec[String] = null
   var useParentInputOpt: OptionSpec[String] = null
   var useParentRnnStateOpt: OptionSpec[Void] = null
+  var useHolePositionOpt: OptionSpec[Void] = null
+  var holePositionDimOpt: OptionSpec[Integer] = null
 
   var skipActionSpaceValidationOpt: OptionSpec[Void] = null
   var trainOnAnnotatedLfsOpt: OptionSpec[Void] = null
@@ -144,6 +146,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     optimizerOpt = parser.accepts("optimizer").withRequiredArg().ofType(classOf[String]).defaultsTo("sgd:e0=0.1:edecay=0.001")
     useParentInputOpt = parser.accepts("useParentInput").withRequiredArg().ofType(classOf[String]).defaultsTo("")
     useParentRnnStateOpt = parser.accepts("useParentRnnState")
+    useHolePositionOpt = parser.accepts("useHolePosition")
+    holePositionDimOpt = parser.accepts("holePositionDim").withRequiredArg().ofType(classOf[Integer]).defaultsTo(50)
 
     skipActionSpaceValidationOpt = parser.accepts("skipActionSpaceValidation")
     trainOnAnnotatedLfsOpt = parser.accepts("trainOnAnnotatedLfs")
@@ -281,6 +285,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     // added by Shivanshu
     config.useParentRnnState = options.has(useParentRnnStateOpt)
     config.useParentInput = options.valueOf(useParentInputOpt)
+    config.useHolePosition = options.has(useHolePositionOpt)
+    config.holePositionDim = options.valueOf(holePositionDimOpt)
     config.coverage = options.has(coverageOpt)
     config.templateTypeSelection = options.valueOf(templateTypeSelectionOpt)
 

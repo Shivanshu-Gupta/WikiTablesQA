@@ -429,15 +429,19 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
 
       val allTemplates = baseTemplates ++ entityTemplates
 
-      // Update the LSTM and use its output to score
-      // the applicable templates.
-      // println("lstm add input")
-      val lstmInput1 = if(config.useParentInput != "") {
-        concatenateArray(Array(prevInput, hole.parentInput))
-      } else {
-        concatenateArray(Array(prevInput))
-      }
       for {
+        // Update the LSTM and use its output to score
+        // the applicable templates.
+        // println("lstm add input")
+        cg <- Pnp.computationGraph()
+        inputs = ListBuffer[Expression](prevInput)
+        _ = if(config.useParentInput != "") inputs.append(hole.parentInput)
+        _ = if(config.useHolePosition) {
+          val positionEmbeddings = cg.getLookupParameter(SemanticParser.HOLE_POSITION_EMBEDDINGS)
+          val posEmb = Expression.lookup(positionEmbeddings, hole.position)
+          inputs.append(posEmb)
+        }
+        lstmInput1 = concatenateArray(inputs.toArray)
         actionLstmInputWeights <- Pnp.param(SemanticParser.ACTION_LSTM_INPUT_WEIGHTS)
         actionLstmInputBias <- Pnp.param(SemanticParser.ACTION_LSTM_INPUT_BIAS)
         lstmInput2 = if (config.actionLstmHiddenLayer) {
@@ -464,7 +468,6 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
         // println("computing attention")
 
         // Compute an attention vector
-        cg <- Pnp.computationGraph()
         attentionWeights <- Pnp.param(SemanticParser.ATTENTION_WEIGHTS_PARAM)
         wordAttentions = if (config.coverage) {
           // println("computing word attention using coverage")
@@ -585,12 +588,17 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
 
         lstmInput = concatenateArray(Array(actionInput, attentionVector))
 
-        parentInput = ListBuffer[Expression]()
+        parentInputsList = ListBuffer[Expression]()
         parentParts = config.useParentInput.split('-').toSet
-        _ = if(parentParts.contains("hidden")) parentInput.append(Expression.concatenate(builder.getH(nextRnnState)))
-        _ = if(parentParts.contains("action")) parentInput.append(actionInput)
-        _ = if(parentParts.contains("attention")) parentInput.append(attentionVector)
-        nextState = templateTuple._1.apply(state, concatenateArray(parentInput.toArray), nextRnnState).addAttention(wordAttentions)
+        _ = if(parentParts.contains("hidden")) parentInputsList.append(Expression.concatenate(builder.getH(nextRnnState)))
+        _ = if(parentParts.contains("action")) parentInputsList.append(actionInput)
+        _ = if(parentParts.contains("attention")) parentInputsList.append(attentionVector)
+        parentInput = if(parentInputsList.nonEmpty) {
+          concatenateArray(parentInputsList.toArray)
+        } else {
+          null
+        }
+        nextState = templateTuple._1.apply(state, parentInput, nextRnnState).addAttention(wordAttentions)
           .addActionScores(baseTemplates, actionScores).addEntityScores(entityTemplates.toVector, entityScores)
 
         // _ = println("recursing")
@@ -860,9 +868,11 @@ class SemanticParserConfig extends Serializable {
   // added by Shivanshu
   var useParentRnnState = false
   var useParentInput = ""
+  var useHolePosition = false
   var coverage = false
   var attentionAggregation = "all"
   var templateTypeSelection = ""
+  var holePositionDim = 50
 
   var entityLinkingLearnedSimilarity = false
   var maxPoolEntityTokenSimiliarities = false
@@ -893,10 +903,13 @@ object SemanticParser {
   // added for coverage - Shivanshu
   val ATTENTION_COVERAGE_WEIGHTS_PARAM = "attentionCoverageWeights:"
 
-  // added by templateTypeSelection - Shivanshu
+  // added for templateTypeSelection - Shivanshu
   val TEMPLATE_TYPE_PROB_WEIGHTS = "templateTypeProbWeights"
   val TEMPLATE_TYPE_PROB_BIAS = "templateTypeProbBias"
   val ENTITY_TEMPLATE_SCORE_MULTIPLIER = "entityTemplateScoreMultiplier"
+
+  // added for encoding hole positions in tree model - Shivanshu
+  val HOLE_POSITION_EMBEDDINGS = "holePositionEmbeddings"
 
   val ACTION_HIDDEN_WEIGHTS = "actionHidden"
   val ACTION_HIDDEN_BIAS = "actionHiddenBias"
@@ -938,8 +951,12 @@ object SemanticParser {
     if(parentParts.contains("action")) parentInputDim += config.actionDim
     if(parentParts.contains("attention")) parentInputDim += 2 * config.hiddenDim
     model.addParameter(ROOT_PARENT_INPUT, Dim(parentInputDim))
-
-    val actionLstmInputDim = config.actionDim + 2 * config.hiddenDim + parentInputDim
+    val actionLstmInputDim = if(config.useHolePosition) {
+      model.addLookupParameter(HOLE_POSITION_EMBEDDINGS, 5, Dim(config.holePositionDim))
+      config.actionDim + 2 * config.hiddenDim + parentInputDim + config.holePositionDim
+    } else {
+      config.actionDim + 2 * config.hiddenDim + parentInputDim
+    }
 
     // Initialize model
     // TODO: document these parameters.
