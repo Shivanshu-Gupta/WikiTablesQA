@@ -2,9 +2,7 @@ package org.allenai.wikitables
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{Map => MutableMap}
-import org.allenai.pnp.Env
-import org.allenai.pnp.PnpInferenceContext
-import org.allenai.pnp.PnpModel
+import org.allenai.pnp.{Env, Execution, PnpInferenceContext, PnpModel}
 import org.allenai.pnp.semparse.EntityLinking
 import org.allenai.pnp.semparse.SemanticParser
 import org.allenai.pnp.semparse.SemanticParserLoss
@@ -30,6 +28,10 @@ import com.jayantkrish.jklol.util.CountAccumulator
 import com.jayantkrish.jklol.ccg.lambda2.Expression2
 import edu.stanford.nlp.sempre.tables.TableKnowledgeGraph
 import fig.basic.LispTree
+import org.json4s.native.JsonMethods.parse
+
+import scala.collection.mutable
+import scala.io.Source
 
 class TestWikiTablesCli extends AbstractCli() {
   
@@ -52,6 +54,8 @@ class TestWikiTablesCli extends AbstractCli() {
   var tableStringOpt: OptionSpec[String] = null
   var numAnswersOpt: OptionSpec[Integer] = null
 
+  var useEntityValidationOpt: OptionSpec[Void] = null
+
   override def initializeOptions(parser: OptionParser): Unit = {
     randomSeedOpt = parser.accepts("randomSeed").withRequiredArg().ofType(classOf[Long]).defaultsTo(2732932987L)
     testDataOpt = parser.accepts("testData").withRequiredArg().ofType(classOf[String]).withValuesSeparatedBy(',')
@@ -68,6 +72,9 @@ class TestWikiTablesCli extends AbstractCli() {
     questionOpt = parser.accepts("question").withRequiredArg().ofType(classOf[String])
     tableStringOpt = parser.accepts("tableString").withRequiredArg().ofType(classOf[String])
     numAnswersOpt = parser.accepts("numAnswers").withRequiredArg().ofType(classOf[Integer])
+
+    // added by Shivanshu
+    useEntityValidationOpt = parser.accepts("useEntityValidation")
   }
 
   override def run(options: OptionSet): Unit = {
@@ -138,7 +145,8 @@ class TestWikiTablesCli extends AbstractCli() {
 
     val (testResults, denotations) = TestWikiTablesCli.test(testData.map(_.ex),
         parser, options.valueOf(beamSizeOpt), options.has(evaluateDpdOpt),
-        true, typeDeclaration, comparator, lfPreprocessor, println)
+        true, typeDeclaration, comparator, lfPreprocessor, println,
+        options.has(useEntityValidationOpt))
     println("*** Evaluation results ***")
     println(testResults)
 
@@ -169,7 +177,7 @@ class TestWikiTablesCli extends AbstractCli() {
     WikiTablesUtil.preprocessExample(processedExample, parser.vocab, featureGenerator, typeDeclaration)
     val (testResult, denotations) = TestWikiTablesCli.test(Seq(processedExample.ex), parser,
         options.valueOf(beamSizeOpt), options.has(evaluateDpdOpt), false, typeDeclaration, comparator,
-        lfPreprocessor, println)
+        lfPreprocessor, println, options.has(useEntityValidationOpt))
     val answers = if (options.has(numAnswersOpt)) {
       denotations.map { x => x._1 -> x._2.take(options.valueOf(numAnswersOpt)) }
     } else {
@@ -195,34 +203,53 @@ object TestWikiTablesCli {
   def main(args: Array[String]): Unit = {
     (new TestWikiTablesCli()).run(args)
   }
-  
+
+  def loadEntities(): Map[String, (List[String], List[String])] = {
+    val fileContents = Source.fromFile("el.json").getLines.mkString(" ")
+    val json = parse(fileContents)
+    val entities = json.values.asInstanceOf[Map[String, List[List[String]]]].map(x => x._1 -> (x._2(0), x._2(1)))
+    return entities
+  }
+
+  def isValidLf(exp: Expression2, entities: List[String]): Boolean = {
+    return entities.count(exp.getStringValue.contains(_)) > Math.min(entities.length * 0.5, 4)
+  }
+
   /** Evaluate the test accuracy of parser on examples. Logical
    * forms are compared for equality using comparator.
    */
   def test(examples: Seq[WikiTablesExample], parser: SemanticParser, beamSize: Int,
       evaluateDpd: Boolean, evaluateOracle: Boolean, typeDeclaration: TypeDeclaration,
       comparator: ExpressionComparator, preprocessor: LfPreprocessor,
-      print: Any => Unit): (SemanticParserLoss, Map[String, List[(Value, Double)]]) = {
+      print: Any => Unit, useEntities: Boolean = false): (SemanticParserLoss, Map[String, List[(Value, Double)]]) = {
 
     print("")
     var numCorrect = 0
     var numCorrectAt10 = 0
     val exampleDenotations = MutableMap[String, List[(Value, Double)]]()
+    val entities = if(useEntities) {
+      loadEntities()
+    } else {
+      Map[String, (List[String], List[String])]()
+    }
     for (e <- examples) {
       val sent = e.sentence
+      val ent = entities.get(e.id).map(_._1)
       print("example id: " + e.id +  " " + e.tableString)
       print(sent.getWords.asScala.mkString(" "))
       print(sent.getAnnotation("unkedTokens").asInstanceOf[List[String]].mkString(" "))
-
       val entityLinking = sent.getAnnotation("entityLinking").asInstanceOf[EntityLinking]
       val dist = parser.parse(sent.getAnnotation("tokenIds").asInstanceOf[Array[Int]],
-          entityLinking)
+        entityLinking)
+      var beam = null: Seq[Execution[SemanticParserState]]
+      do {
+        ComputationGraph.renew()
+        val context = PnpInferenceContext.init(parser.model)
+        val results = dist.beamSearch(beamSize, 75, Env.init, context)
 
-      ComputationGraph.renew()
-      val context = PnpInferenceContext.init(parser.model)
-      val results = dist.beamSearch(beamSize, 75, Env.init, context)
+        beam = results.executions.slice(0, 10)
+      } while(ent.isDefined && !beam.exists(x => isValidLf(x.value.decodeExpression, ent.get)))
 
-      val beam = results.executions.slice(0, 10)
       val correctAndValue = beam.map { x =>
         val expression = x.value.decodeExpression
         val value = e.executeFormula(preprocessor.postprocess(expression))
@@ -247,12 +274,14 @@ object TestWikiTablesCli {
           false
         }
         
-        (isCorrect, value, x.logProb)
+        (isCorrect, value, x.logProb, ent.isEmpty || isValidLf(expression, ent.get))
       }
-      
-      var exampleCorrect = false  
+
+      var exampleCorrect = false
       if (correctAndValue.length > 0) {
-        if (correctAndValue(0)._1) {
+        val mostProbableValidExp = correctAndValue.find(x => x._4)
+        print("predicted LF: " + mostProbableValidExp)
+        if (mostProbableValidExp.get._1) {
           numCorrect += 1
           exampleCorrect = true
         }
