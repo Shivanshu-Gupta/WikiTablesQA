@@ -2,15 +2,24 @@
 import numpy as np
 
 def get_epoch_dev_accs(train_log):
-    epoch_accs = np.array([float(line.strip().split('=')[1]) * 100 for line in open(train_log) if line.find('dev accuracy') != -1])
+    try:
+        epoch_accs = np.array([float(line.strip().split('=')[1]) * 100 for line in open(train_log) if line.find('dev accuracy') != -1])
+    except Exception as e:
+        return []
     return epoch_accs
 
 def get_dev_acc(dev_error_log):
-    dev_acc = open(dev_error_log).readlines()[-3].split(':')[1].split(' ')[1]
+    try:
+        dev_acc = open(dev_error_log).readlines()[-3].split(':')[1].split(' ')[1]
+    except Exception as e:
+        return -1.
     return float(dev_acc) * 100
 
 def get_official_result(official_result):
-    result = open(official_result).readlines()[-1].split(':')[1]
+    try:
+        result = open(official_result).readlines()[-1].split(':')[1]
+    except Exception as e:
+        return -1.
     return float(result) * 100
 
 # for optimizer hyper-parameter search
