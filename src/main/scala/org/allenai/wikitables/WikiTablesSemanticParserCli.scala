@@ -354,12 +354,15 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     val model = parser.model
     val params = optim.split(":")
     val optimParams = params.tail.map(_.split('=')).map(x => (x(0), x(1).toFloat)).toMap
+    println("Optimizer Params: " + optimParams)
     val optimizer = if (params.head == "adam") {
       val e0 = optimParams.getOrElse("e0", 0.001f)
+      println("Optimizer: adam:e0=" + e0)
       new AdamTrainer(model.model, e0, 0.9f, 0.999f, 1e-8f)
     } else {
       val e0 = optimParams.getOrElse("e0", 0.1f)
       val edecay = optimParams.getOrElse("edecay", 0.01f)
+      println("Optimizer: sgd:e0=" + e0 + ":edecay=" + edecay)
       new SimpleSGDTrainer(model.model, e0, edecay)
     }
     val logFunction = new SemanticParserLogFunction(modelDir, bestModelOutput,
