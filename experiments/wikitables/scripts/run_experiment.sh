@@ -8,7 +8,8 @@ source "experiments/wikitables/scripts/config.sh"
 MAX_TRAINING_DERIVATIONS=$D
 
 MY_NAME=model_${TRAIN_SIZE}_D${D}
-MY_DIR=$EXPERIMENT_DIR/$MY_NAME/
+echo $SETTING
+MY_DIR=$EXPERIMENT_DIR/$MY_NAME/$SETTING
 MY_MODEL=$MY_DIR/parser_final.ser
 MODEL_DIR=$MY_DIR/models/
 echo $MY_DIR

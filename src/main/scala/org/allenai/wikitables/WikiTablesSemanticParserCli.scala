@@ -74,6 +74,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   var trainOnAnnotatedLfsOpt: OptionSpec[Void] = null
   var seq2TreeOpt: OptionSpec[Void] = null
   var seq2SeqOpt: OptionSpec[Void] = null
+
+  var optimizerOpt: OptionSpec[String] = null
   var toWriteBags: OptionSpec[Void] = null
   var bagSize: OptionSpec[Integer] = null
   var numBags: OptionSpec[Integer] = null
@@ -125,6 +127,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     trainOnAnnotatedLfsOpt = parser.accepts("trainOnAnnotatedLfs")
     seq2TreeOpt = parser.accepts("seq2Tree")
     seq2SeqOpt = parser.accepts("seq2Seq")
+
+    optimizerOpt = parser.accepts("optimizer").withRequiredArg().ofType(classOf[String]).defaultsTo("sgd:e0=0.1:edecay=0.01")
     toWriteBags = parser.accepts("toWriteBags")
     bagSize = parser.accepts("bagSize").withRequiredArg().ofType(classOf[Integer]).defaultsTo(10)
     numBags = parser.accepts("numBags").withRequiredArg().ofType(classOf[Integer]).defaultsTo(10)
@@ -281,7 +285,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
       None
     }
 
-    train(trainingData, devData, parser, typeDeclaration, simplifier, lfPreprocessor,
+    train(trainingData, devData, parser, typeDeclaration, simplifier, lfPreprocessor, options.valueOf(optimizerOpt),
         options.valueOf(epochsOpt), options.valueOf(beamSizeOpt), options.valueOf(devBeamSizeOpt),
         options.valueOf(dropoutOpt), options.has(lasoOpt), modelOutputDir,
         Some(options.valueOf(modelOutputOpt)), options.valueOf(kOpt), options.valueOf(marginOpt))
@@ -293,7 +297,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   def train(trainingExamples: Seq[WikiTablesExample], devExamples: Seq[WikiTablesExample],
       parser: SemanticParserNoPnp, typeDeclaration: TypeDeclaration,
       simplifier: ExpressionSimplifier, preprocessor: LfPreprocessor,
-      epochs: Int, beamSize: Int, devBeamSize: Int,
+      optim: String, epochs: Int, beamSize: Int, devBeamSize: Int,
       dropout: Double, laso: Boolean, modelDir: Option[String],
       bestModelOutput: Option[String], k: Int, margin: Int): Unit = {
 
@@ -324,7 +328,19 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     
     // Train model
     val model = parser.model
-    val sgd = new SimpleSGDTrainer(parser.model, 0.1f, 0.01f)
+	    val params = optim.split(":")
+    val optimParams = params.tail.map(_.split('=')).map(x => (x(0), x(1).toFloat)).toMap
+    println("Optimizer Params: " + optimParams)
+    val optimizer = if (params.head == "adam") {
+      val e0 = optimParams.getOrElse("e0", 0.001f)
+      println("Optimizer: adam:e0=" + e0)
+      new AdamTrainer(model, e0, 0.9f, 0.999f, 1e-8f)
+    } else {
+      val e0 = optimParams.getOrElse("e0", 0.1f)
+      val edecay = optimParams.getOrElse("edecay", 0.01f)
+      println("Optimizer: sgd:e0=" + e0 + ":edecay=" + edecay)
+      new SimpleSGDTrainer(model, e0, edecay)
+    }
     val logFunction = new SemanticParserLogFunction(modelDir, bestModelOutput,
         parser, trainErrorExamples, devExamples, devBeamSize, 2,
         typeDeclaration, new SimplificationComparator(simplifier),
@@ -333,12 +349,12 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     if (laso) {
       println("Running LaSO training...")
 //      model.locallyNormalized = false
-//      val trainer = new BsoTrainer(epochs, beamSize, 50, model, sgd, logFunction)
+//      val trainer = new BsoTrainer(epochs, beamSize, 50, model, optimizer, logFunction)
 //      trainer.train(pnpExamples.toList)
     } else {
       println("Running loglikelihood training...")
 //      model.locallyNormalized = true
-      val trainer = new LoglikelihoodTrainerNoPnp(epochs, true, parser, sgd,
+      val trainer = new LoglikelihoodTrainerNoPnp(epochs, true, parser, optimizer,
           logFunction, typeDeclaration, k, margin)
       trainer.train(trainingExamples)
     }
