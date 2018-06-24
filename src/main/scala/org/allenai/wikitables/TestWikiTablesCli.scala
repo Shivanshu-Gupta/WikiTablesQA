@@ -54,7 +54,10 @@ class TestWikiTablesCli extends AbstractCli() {
   var tableStringOpt: OptionSpec[String] = null
   var numAnswersOpt: OptionSpec[Integer] = null
 
-  var useEntityValidationOpt: OptionSpec[Void] = null
+  var entitiesJsonOpt: OptionSpec[String] = null
+  var maxBeamSizeOpt: OptionSpec[Integer] = null
+  var fOpt: OptionSpec[Double] = null
+  var mOpt: OptionSpec[Integer] = null
 
   override def initializeOptions(parser: OptionParser): Unit = {
     randomSeedOpt = parser.accepts("randomSeed").withRequiredArg().ofType(classOf[Long]).defaultsTo(2732932987L)
@@ -62,7 +65,7 @@ class TestWikiTablesCli extends AbstractCli() {
     derivationsPathOpt = parser.accepts("derivationsPath").withRequiredArg().ofType(classOf[String])
     noDerivationsOpt = parser.accepts("noDerivations")
     modelOpt = parser.accepts("model").withRequiredArg().ofType(classOf[String]).withValuesSeparatedBy(',').required()
-    
+
     tsvOutputOpt = parser.accepts("tsvOutput").withRequiredArg().ofType(classOf[String])
 
     beamSizeOpt = parser.accepts("beamSize").withRequiredArg().ofType(classOf[Integer]).defaultsTo(5)
@@ -74,13 +77,16 @@ class TestWikiTablesCli extends AbstractCli() {
     numAnswersOpt = parser.accepts("numAnswers").withRequiredArg().ofType(classOf[Integer])
 
     // added by Shivanshu
-    useEntityValidationOpt = parser.accepts("useEntityValidation")
+    entitiesJsonOpt = parser.accepts("entitiesJson").withRequiredArg().ofType(classOf[String]).defaultsTo("")
+    maxBeamSizeOpt = parser.accepts("maxBeamSize").withRequiredArg().ofType(classOf[Integer]).defaultsTo(40)
+    fOpt = parser.accepts("f").withRequiredArg().ofType(classOf[Double]).defaultsTo(0.5)
+    mOpt = parser.accepts("m").withRequiredArg().ofType(classOf[Integer]).defaultsTo(4)
   }
 
   override def run(options: OptionSet): Unit = {
     Initialize.initialize(Map("dynet-mem" -> "4096", "random-seed" -> options.valueOf(randomSeedOpt)))
 
-    // Get the predicted denotations of each model. (and print out 
+    // Get the predicted denotations of each model. (and print out
     // error analysis)
     val modelDenotations = if (options.has(questionOpt)) {
       // Single question mode
@@ -108,13 +114,13 @@ class TestWikiTablesCli extends AbstractCli() {
     } else {
       modelDenotations.head
     }
-    
+
     /*
     println("*** Validating test set action space ***")
     val testSeparatedLfs = WikiTablesSemanticParserCli.getCcgDataset(testPreprocessed)
     SemanticParserUtils.validateActionSpace(testSeparatedLfs, parser, typeDeclaration)
     */
-    
+
     if (options.has(tsvOutputOpt)) {
       val filename = options.valueOf(tsvOutputOpt)
       val tsvStrings = denotations.map { d =>
@@ -146,7 +152,8 @@ class TestWikiTablesCli extends AbstractCli() {
     val (testResults, denotations) = TestWikiTablesCli.test(testData.map(_.ex),
         parser, options.valueOf(beamSizeOpt), options.has(evaluateDpdOpt),
         true, typeDeclaration, comparator, lfPreprocessor, println,
-        options.has(useEntityValidationOpt))
+        options.valueOf(entitiesJsonOpt), options.valueOf(maxBeamSizeOpt),
+        options.valueOf(fOpt), options.valueOf(mOpt))
     println("*** Evaluation results ***")
     println(testResults)
 
@@ -177,7 +184,8 @@ class TestWikiTablesCli extends AbstractCli() {
     WikiTablesUtil.preprocessExample(processedExample, parser.vocab, featureGenerator, typeDeclaration)
     val (testResult, denotations) = TestWikiTablesCli.test(Seq(processedExample.ex), parser,
         options.valueOf(beamSizeOpt), options.has(evaluateDpdOpt), false, typeDeclaration, comparator,
-        lfPreprocessor, println, options.has(useEntityValidationOpt))
+        lfPreprocessor, println, options.valueOf(entitiesJsonOpt), options.valueOf(maxBeamSizeOpt),
+        options.valueOf(fOpt), options.valueOf(mOpt))
     val answers = if (options.has(numAnswersOpt)) {
       denotations.map { x => x._1 -> x._2.take(options.valueOf(numAnswersOpt)) }
     } else {
@@ -204,15 +212,19 @@ object TestWikiTablesCli {
     (new TestWikiTablesCli()).run(args)
   }
 
-  def loadEntities(): Map[String, (List[String], List[String])] = {
-    val fileContents = Source.fromFile("el.json").getLines.mkString(" ")
+  def loadEntities(entitiesJson: String): Map[String, (List[String], List[String])] = {
+    val fileContents = Source.fromFile(entitiesJson).getLines.mkString(" ")
     val json = parse(fileContents)
     val entities = json.values.asInstanceOf[Map[String, List[List[String]]]].map(x => x._1 -> (x._2(0), x._2(1)))
     return entities
   }
 
-  def isValidLf(exp: Expression2, entities: List[String]): Boolean = {
-    return entities.count(exp.getStringValue.contains(_)) > Math.min(entities.length * 0.5, 4)
+  def isValidLf(exp: Expression2, entities: List[String], f: Double, m: Integer, debug: Boolean = false): Boolean = {
+    val validity = entities.count(exp.toString.contains(_)) > Math.min(entities.length * f, m.doubleValue())
+    if(debug) {
+      println(validity + "\t" + exp.toString)
+    }
+    return validity
   }
 
   /** Evaluate the test accuracy of parser on examples. Logical
@@ -221,14 +233,15 @@ object TestWikiTablesCli {
   def test(examples: Seq[WikiTablesExample], parser: SemanticParser, beamSize: Int,
       evaluateDpd: Boolean, evaluateOracle: Boolean, typeDeclaration: TypeDeclaration,
       comparator: ExpressionComparator, preprocessor: LfPreprocessor,
-      print: Any => Unit, useEntities: Boolean = false): (SemanticParserLoss, Map[String, List[(Value, Double)]]) = {
+      print: Any => Unit, entitiesJson: String = "", maxBeamSize: Int = 80,
+      f: Double = 0.5, m: Integer = 4): (SemanticParserLoss, Map[String, List[(Value, Double)]]) = {
 
     print("")
     var numCorrect = 0
     var numCorrectAt10 = 0
     val exampleDenotations = MutableMap[String, List[(Value, Double)]]()
-    val entities = if(useEntities) {
-      loadEntities()
+    val entities = if(entitiesJson.nonEmpty) {
+      loadEntities(entitiesJson)
     } else {
       Map[String, (List[String], List[String])]()
     }
@@ -242,13 +255,22 @@ object TestWikiTablesCli {
       val dist = parser.parse(sent.getAnnotation("tokenIds").asInstanceOf[Array[Int]],
         entityLinking)
       var beam = null: Seq[Execution[SemanticParserState]]
-      do {
+      var currBeamSize = beamSize
+      var found: Boolean = false
+      while(beam == null || (currBeamSize <= maxBeamSize && !found)) {
+        println("beam size: " + currBeamSize)
         ComputationGraph.renew()
         val context = PnpInferenceContext.init(parser.model)
-        val results = dist.beamSearch(beamSize, 75, Env.init, context)
+        val results = dist.beamSearch(currBeamSize, 75, Env.init, context)
 
         beam = results.executions.slice(0, 10)
-      } while(ent.isDefined && !beam.exists(x => isValidLf(x.value.decodeExpression, ent.get)))
+        currBeamSize *= 2
+        found = if(ent.isDefined) {
+          beam.exists(x => isValidLf(x.value.decodeExpression, ent.get, f, m))
+        } else {
+          true
+        }
+      }
 
       val correctAndValue = beam.map { x =>
         val expression = x.value.decodeExpression
@@ -265,26 +287,32 @@ object TestWikiTablesCli {
             false
           }
         }
-
+        val isValid = ent.isEmpty || isValidLf(expression, ent.get, f, m, true)
         if (isCorrect) {
-          print("* " + x.logProb.formatted("%02.3f") + "  " + expression + " -> " + value)
+          print("* " + x.logProb.formatted("%02.3f") + "  " + isValid + "\t" + expression + " -> " + value)
           true
         } else {
-          print("  " + x.logProb.formatted("%02.3f") + "  " + expression + " -> " + value)
+          print("  " + x.logProb.formatted("%02.3f") + "  " + isValid + "\t" + expression + " -> " + value)
           false
         }
         
-        (isCorrect, value, x.logProb, ent.isEmpty || isValidLf(expression, ent.get))
+        (isCorrect, value, x.logProb, isValid)
       }
 
       var exampleCorrect = false
       if (correctAndValue.length > 0) {
         val mostProbableValidExp = correctAndValue.find(x => x._4)
-        print("predicted LF: " + mostProbableValidExp)
-        if (mostProbableValidExp.get._1) {
+        val prediction = if(mostProbableValidExp.isDefined) {
+          mostProbableValidExp.get
+        } else {
+          correctAndValue.head
+        }
+        print("predicted LF: " + prediction)
+        if (prediction._1) {
           numCorrect += 1
           exampleCorrect = true
         }
+
       }
       if (correctAndValue.foldRight(false)((x, y) => x._1 || y)) {
         numCorrectAt10 += 1
@@ -293,7 +321,7 @@ object TestWikiTablesCli {
       // Store all defined values sorted in probability order
       exampleDenotations(e.id) = correctAndValue.filter(_._2.isDefined).map(
           x => (x._2.get, x._3)).toList
-      
+
       print("id: " + e.id + " " + exampleCorrect)
 
       // Re-parse with a label oracle to find the highest-scoring correct parses.
