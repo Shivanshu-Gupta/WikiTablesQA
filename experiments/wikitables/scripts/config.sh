@@ -3,7 +3,7 @@
 # Which fold to train on.
 #FOLD=3
 SCRIPT_DIR="experiments/wikitables/scripts/"
-EXPERIMENT_DIR="/scratch/cse/dual/cs5130298/dpd/miml/experiments/$EXP_TYPE/$LF_TYPE/$EXP_NAME/FOLD_$FOLD"
+EXPERIMENT_DIR="/home/cse/dual/cs5130298/Academics/MachineComprehension/WikiTablesQA/experiments/wikitables/output/miml/experiments/$EXP_TYPE/$LF_TYPE/$EXP_NAME/FOLD_$FOLD"
 
 # Training data.
 # This is a subsample of 100 examples
@@ -13,16 +13,17 @@ TRAIN="$EXPERIMENT_DIR/../../dpd_output/random-split-$FOLD-train-$TRAIN_SIZE.exa
 
 # Development data used for evaluating model accuracy as training progresses.
 # Using a subsample here can reduce training time.
-#TRAIN_DEV="$EXPERIMENT_DIR/../../../examples/random-split-$FOLD-dev-100.examples"
+#TRAIN_DEV="$EXPERIMENT_DIR/../../../../../examples/random-split-$FOLD-dev-100.examples"
 # Uncomment below to use the full dev set.
-TRAIN_DEV="$EXPERIMENT_DIR/../../../../examples/random-split-$FOLD-dev.examples"
+TRAIN_DEV="$EXPERIMENT_DIR/../../../../../examples/random-split-$FOLD-dev.examples"
 
 # Development data for evaluating the final trained model.
-#DEV="$EXPERIMENT_DIR/../../../examples/random-split-$FOLD-dev-100.examples"
+#DEV="$EXPERIMENT_DIR/../../../../../examples/random-split-$FOLD-dev-100.examples"
 # Uncomment below to use the full dev set.
-DEV="$EXPERIMENT_DIR/../../../../examples/random-split-$FOLD-dev.examples"
+DEV="$EXPERIMENT_DIR/../../../../../examples/random-split-$FOLD-dev.examples"
 # Uncomment below to use the test set.
-#DEV="$EXPERIMENT_DIR/../../../examples/pristine-unseen-tables.examples"
+#DEV="$EXPERIMENT_DIR/../../../../../examples/pristine-unseen-tables.examples"
+TEST="$EXPERIMENT_DIR/../../../../../examples/pristine-unseen-tables.examples"
 
 # Location of DPD output
 DERIVATIONS_PATH="$EXPERIMENT_DIR/../../dpd_output/"

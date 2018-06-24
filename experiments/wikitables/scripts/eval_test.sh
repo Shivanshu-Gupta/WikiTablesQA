@@ -1,7 +1,5 @@
 #!/bin/bash -e
-# Usage: MY_DIR=<experiment_dir> ./experiments/wikitables/scripts/eval_dev.sh
-
-# source "experiments/wikitables/scripts/config.sh"
+# Usage: MY_DIR=<experiment_dir> ./experiments/wikitables/scripts/eval_test.sh
 
 SCRIPT_DIR="experiments/wikitables/scripts/"
 MODEL_DIR=$MY_DIR/models/
@@ -17,10 +15,10 @@ DIFF=$MY_DIR/test_correct_diff.txt
 mkdir -p $MY_DIR
 mkdir -p $MODEL_DIR
 
-echo "Evaluating $MY_NAME development error..."
-./$SCRIPT_DIR/run.sh org.allenai.wikitables.TestWikiTablesCli --testData $DEV --model $MY_MODEL --beamSize $TEST_BEAM_SIZE --maxDerivations $MAX_TEST_DERIVATIONS --tsvOutput $TSV_OUT --derivationsPath $DERIVATIONS_PATH &> $DEV_LOG
+./$SCRIPT_DIR/run.sh org.allenai.wikitables.TestWikiTablesCli --testData $DEV --model $MY_MODEL --beamSize $TEST_BEAM_SIZE --maxDerivations $MAX_TEST_DERIVATIONS --tsvOutput $TSV_OUT --derivationsPath $DERIVATIONS_PATH --randomSeed $SEED &> $DEV_LOG
 
-python2 data/WikiTableQuestions/evaluator.py -t data/WikiTableQuestions/tagged/data/ $TSV_OUT > $OFFICIAL 2> $OFFICIAL_TXT
+source activate snowflakes
+python data/WikiTableQuestions/evaluator.py -t data/WikiTableQuestions/tagged/data/ $TSV_OUT > $OFFICIAL 2> $OFFICIAL_TXT
 
 cut -f1,2 $OFFICIAL | sort | tr '[:upper:]' '[:lower:]' | sed -e "s/[[:space:]]/ /" > $OFFICIAL_CORRECT_MAP
 grep '^id: ' $DEV_LOG | sed 's/id: //' | sort > $MY_CORRECT_MAP
