@@ -42,4 +42,5 @@ lib/stanford-corenlp-*models.jar
 
 # logs
 experiments/wikitables/output
-
+install/
+src/main/scala/org/allenai/wikitables/.nfs*

@@ -222,6 +222,11 @@ object TestWikiTablesCli {
       val context = PnpInferenceContext.init(parser.model)
       val results = dist.beamSearch(beamSize, 75, Env.init, context)
 
+      // ksk added
+      val states = results.executions.map(_.value.asInstanceOf[SemanticParserState])
+      val tokenEntityScores = states(0).getScoreMatrix() // The scores remain same for all states
+      printTokenEntityScores(entityLinking, e.sentence.getWords.asScala.toArray, tokenEntityScores, print)
+
       val beam = results.executions.slice(0, 10)
       val correctAndValue = beam.map { x =>
         val expression = x.value.decodeExpression
@@ -241,9 +246,11 @@ object TestWikiTablesCli {
 
         if (isCorrect) {
           print("* " + x.logProb.formatted("%02.3f") + "  " + expression + " -> " + value)
+//          print("* " + x.logProb.formatted("%02.3f") + "  " + expression + " -> " + getAnswerTsvParts(value.toList).mkString("\t"))
           true
         } else {
           print("  " + x.logProb.formatted("%02.3f") + "  " + expression + " -> " + value)
+//          print("  " + x.logProb.formatted("%02.3f") + "  " + expression + " -> " + getAnswerTsvParts(value.toList).mkString("\t"))
           false
         }
         
@@ -292,7 +299,7 @@ object TestWikiTablesCli {
       if (beam.nonEmpty) {
         printAttentions(beam(0).value, e.sentence.getWords.asScala.toArray, print)
       }
-      
+
       printEntityTokenFeatures(entityLinking, e.sentence.getWords.asScala.toArray, print)
     }
 
@@ -324,7 +331,29 @@ object TestWikiTablesCli {
       print("  " + tokenStrings.mkString(" ") + " " + templates(i))
     }
   }
-  
+
+  def printTokenEntityScores(entityLinking: EntityLinking, tokens: Array[String],
+                             tokenEntityScores: Expression, print: Any => Unit): Unit = {
+    print("")
+    print("")
+    val tokenEntityProbScores = Expression.transpose(Expression.softmax(Expression.transpose(tokenEntityScores)))
+
+    for ((token, i) <- tokens.zipWithIndex) {
+      print("")
+      val scoresToken = ComputationGraph.forward(Expression.pick(tokenEntityProbScores, i, 0)).toVector()
+      val (sortedScores, indices) = scoresToken.zipWithIndex.sorted.unzip
+      var stop = 0
+      for ((score, index) <- sortedScores.zip(indices).reverse) {
+        stop = stop + 1
+        if(stop < 5){
+          print(entityLinking.entities(index).expr + " " + token + " " + score)
+        }
+      }
+    }
+    print("")
+    print("")
+  }
+
   def printEntityTokenFeatures(entityLinking: EntityLinking, tokens: Array[String],
       print: Any => Unit): Unit = {
     for ((entity, features) <- entityLinking.entities.zip(entityLinking.entityTokenFeatures)) {

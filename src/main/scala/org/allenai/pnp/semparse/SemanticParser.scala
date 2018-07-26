@@ -406,6 +406,14 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
   private def parse(input: InputEncoding, builder: RnnBuilder, prevInput: Expression,
       rnnState: Int, state: SemanticParserState): Pnp[SemanticParserState] = {
     if (state.unfilledHoleIds.length == 0) {
+
+      // ksk added
+      val allEntityTypeScores = input.entityEncoding.tokenEntityScoreMatrices.values.toList
+      val tokenEntityScoreMatrix = concatenateCols(allEntityTypeScores:_*)
+//      val tokenEntityScoreMatrix = concatenateCols(new ExpressionVector(allEntityTypeScores))
+      state.setScoreMatrix(tokenEntityScoreMatrix)
+      // end
+
       // If there are no holes, return the completed logical form.
       Pnp.value(state)
     } else {

@@ -19,6 +19,18 @@ case class SemanticParserState(val parts: Map[Int, ExpressionPart],
     val numActions: Int, val rootType: Type,
     val templates: List[Template], val attentions: List[Expression]) {
 
+  // ksk added
+  var tokenEntityScoreMatrix: Expression = null
+
+  def setScoreMatrix(scoreMatrix: Expression): Unit = {
+    this.tokenEntityScoreMatrix = scoreMatrix
+  }
+
+  def getScoreMatrix(): Expression = {
+    this.tokenEntityScoreMatrix
+  }
+  // end
+
   def decodeExpression(partId: Int): Expression2 = {
     val part = parts(partId)
 

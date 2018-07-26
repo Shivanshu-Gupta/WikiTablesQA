@@ -2,24 +2,24 @@
 
 SCRIPT_DIR="experiments/wikitables/scripts/"
 # Which fold to train on.
-FOLD=1
+FOLD=2
 
 # Training data.
 # This is a subsample of 100 examples
-TRAIN="data/WikiTableQuestions/data/subsamples/random-split-$FOLD-train-100.examples"
+#TRAIN="data/WikiTableQuestions/data/subsamples/random-split-$FOLD-train-100.examples"
 # Uncomment below to use the full training set.
-# TRAIN="data/WikiTableQuestions/data/random-split-$FOLD-train.examples"
+ TRAIN="data/WikiTableQuestions/data/random-split-$FOLD-train.examples"
 
 # Development data used for evaluating model accuracy as training progresses.
 # Using a subsample here can reduce training time.
-TRAIN_DEV="data/WikiTableQuestions/data/subsamples/random-split-$FOLD-dev-100.examples"
+#TRAIN_DEV="data/WikiTableQuestions/data/subsamples/random-split-$FOLD-dev-100.examples"
 # Uncomment below to use the full dev set.
-# TRAIN_DEV="data/WikiTableQuestions/data/random-split-$FOLD-dev.examples"
+ TRAIN_DEV="data/WikiTableQuestions/data/random-split-$FOLD-dev.examples"
 
 # Development data for evaluating the final trained model.
-DEV="data/WikiTableQuestions/data/subsamples/random-split-$FOLD-dev-100.examples"
+#DEV="data/WikiTableQuestions/data/subsamples/random-split-$FOLD-dev-100.examples"
 # Uncomment below to use the full dev set.
-# DEV="data/WikiTableQuestions/data/random-split-$FOLD-dev.examples"
+ DEV="data/WikiTableQuestions/data/random-split-$FOLD-dev.examples"
 # Uncomment below to use the test set.
 # DEV="data/WikiTableQuestions/data/pristine-unseen-tables.examples"
 TEST="data/WikiTableQuestions/data/pristine-unseen-tables.examples"
