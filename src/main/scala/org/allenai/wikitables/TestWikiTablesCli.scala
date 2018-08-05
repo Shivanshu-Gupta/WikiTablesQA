@@ -25,6 +25,8 @@ import edu.stanford.nlp.sempre._
 import java.nio.file.Paths
 import java.nio.file.Files
 import java.nio.charset.StandardCharsets
+import java.io.PrintWriter
+import java.io.File
 
 import com.jayantkrish.jklol.util.CountAccumulator
 import com.jayantkrish.jklol.ccg.lambda2.Expression2
@@ -42,6 +44,7 @@ class TestWikiTablesCli extends AbstractCli() {
   var modelOpt: OptionSpec[String] = null
 
   var tsvOutputOpt: OptionSpec[String] = null
+  var scoresOutputOpt: OptionSpec[String] = null
   
   var beamSizeOpt: OptionSpec[Integer] = null
   var evaluateDpdOpt: OptionSpec[Void] = null
@@ -53,7 +56,8 @@ class TestWikiTablesCli extends AbstractCli() {
   var numAnswersOpt: OptionSpec[Integer] = null
 
   override def initializeOptions(parser: OptionParser): Unit = {
-    randomSeedOpt = parser.accepts("randomSeed").withRequiredArg().ofType(classOf[Long]).defaultsTo(2732932987L)
+    //randomSeedOpt = parser.accepts("randomSeed").withRequiredArg().ofType(classOf[Long]).defaultsTo(2732932987L)
+    randomSeedOpt = parser.accepts("randomSeed").withRequiredArg().ofType(classOf[Long]).defaultsTo(3287527509L)
     testDataOpt = parser.accepts("testData").withRequiredArg().ofType(classOf[String]).withValuesSeparatedBy(',')
     derivationsPathOpt = parser.accepts("derivationsPath").withRequiredArg().ofType(classOf[String])
     noDerivationsOpt = parser.accepts("noDerivations")
@@ -68,6 +72,8 @@ class TestWikiTablesCli extends AbstractCli() {
     questionOpt = parser.accepts("question").withRequiredArg().ofType(classOf[String])
     tableStringOpt = parser.accepts("tableString").withRequiredArg().ofType(classOf[String])
     numAnswersOpt = parser.accepts("numAnswers").withRequiredArg().ofType(classOf[Integer])
+
+    scoresOutputOpt = parser.accepts("scoresOutput").withRequiredArg().ofType(classOf[String])
   }
 
   override def run(options: OptionSet): Unit = {
@@ -138,7 +144,7 @@ class TestWikiTablesCli extends AbstractCli() {
 
     val (testResults, denotations) = TestWikiTablesCli.test(testData.map(_.ex),
         parser, options.valueOf(beamSizeOpt), options.has(evaluateDpdOpt),
-        true, typeDeclaration, comparator, lfPreprocessor, println)
+        true, typeDeclaration, comparator, lfPreprocessor, println, options.valueOf(scoresOutputOpt))
     println("*** Evaluation results ***")
     println(testResults)
 
@@ -169,7 +175,7 @@ class TestWikiTablesCli extends AbstractCli() {
     WikiTablesUtil.preprocessExample(processedExample, parser.vocab, featureGenerator, typeDeclaration)
     val (testResult, denotations) = TestWikiTablesCli.test(Seq(processedExample.ex), parser,
         options.valueOf(beamSizeOpt), options.has(evaluateDpdOpt), false, typeDeclaration, comparator,
-        lfPreprocessor, println)
+        lfPreprocessor, println, options.valueOf(scoresOutputOpt))
     val answers = if (options.has(numAnswersOpt)) {
       denotations.map { x => x._1 -> x._2.take(options.valueOf(numAnswersOpt)) }
     } else {
@@ -202,12 +208,15 @@ object TestWikiTablesCli {
   def test(examples: Seq[WikiTablesExample], parser: SemanticParser, beamSize: Int,
       evaluateDpd: Boolean, evaluateOracle: Boolean, typeDeclaration: TypeDeclaration,
       comparator: ExpressionComparator, preprocessor: LfPreprocessor,
-      print: Any => Unit): (SemanticParserLoss, Map[String, List[(Value, Double)]]) = {
+      print: Any => Unit, scoresOutputFp: String): (SemanticParserLoss, Map[String, List[(Value, Double)]]) = {
 
     print("")
     var numCorrect = 0
     var numCorrectAt10 = 0
     val exampleDenotations = MutableMap[String, List[(Value, Double)]]()
+    
+    val sw = new PrintWriter(new File(scoresOutputFp))
+
     for (e <- examples) {
       val sent = e.sentence
       print("example id: " + e.id +  " " + e.tableString)
@@ -226,6 +235,17 @@ object TestWikiTablesCli {
       val states = results.executions.map(_.value.asInstanceOf[SemanticParserState])
 //      val tokenEntityScores = states(0).getScoreMatrix() // The scores remain same for all states
 //      printTokenEntityScores(entityLinking, e.sentence.getWords.asScala.toArray, tokenEntityScores, print)
+      sw.write(e.id + "\t" + "www.cse.iitd.ac.in/~kskeshav/wikitables/"+e.id+"\n")
+      sw.write("Question: "+sent.getWords.asScala.mkString(" ")+"\n")
+      val tokenEntityScores = if(states.length > 0){
+        states(0).getScoreMatrix() // The scores remain same for all states
+      } else {
+        None
+      }
+
+      if(tokenEntityScores != None){
+        printTokenEntityScores(entityLinking, e.sentence.getWords.asScala.toArray, tokenEntityScores.asInstanceOf[Expression], sw, sent.getAnnotation("NER").asInstanceOf[List[List[String]]])
+      }
 
       val beam = results.executions.slice(0, 10)
       val correctAndValue = beam.map { x =>
@@ -303,6 +323,7 @@ object TestWikiTablesCli {
       printEntityTokenFeatures(entityLinking, e.sentence.getWords.asScala.toArray, print)
     }
 
+    sw.close()
     val loss = SemanticParserLoss(numCorrect, numCorrectAt10, examples.length)
     (loss, exampleDenotations.toMap)
   }
@@ -333,25 +354,31 @@ object TestWikiTablesCli {
   }
 
   def printTokenEntityScores(entityLinking: EntityLinking, tokens: Array[String],
-                             tokenEntityScores: Expression, print: Any => Unit): Unit = {
-    print("")
-    print("")
+                             tokenEntityScores: Expression, writer: PrintWriter, nerList: List[List[String]]): Unit = {
+    writer.write("\n")
     val tokenEntityProbScores = Expression.transpose(Expression.softmax(Expression.transpose(tokenEntityScores)))
 
+    print(nerList)
     for ((token, i) <- tokens.zipWithIndex) {
-      print("")
+      writer.write(token+"\t")
+      if(nerList(i) == Nil){
+        writer.write("O"+"\t")
+      }
+      else{
+        writer.write(nerList(i)(0)+"\t")
+      }
       val scoresToken = ComputationGraph.forward(Expression.pick(tokenEntityProbScores, i, 0)).toVector()
       val (sortedScores, indices) = scoresToken.zipWithIndex.sorted.unzip
       var stop = 0
       for ((score, index) <- sortedScores.zip(indices).reverse) {
         stop = stop + 1
-        if(stop < 5){
-          print(entityLinking.entities(index).expr + " " + token + " " + score)
+        if(stop <= 2){
+          writer.write(entityLinking.entities(index).expr + ":" + score + "\t")
         }
       }
+      writer.write("\n")
     }
-    print("")
-    print("")
+    writer.write("\n")
   }
 
   def printEntityTokenFeatures(entityLinking: EntityLinking, tokens: Array[String],
