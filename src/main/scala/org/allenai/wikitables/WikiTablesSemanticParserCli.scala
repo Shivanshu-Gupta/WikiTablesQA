@@ -306,7 +306,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
       sentence = x.sentence
       tokenIds = sentence.getAnnotation("tokenIds").asInstanceOf[Array[Int]]
       entityLinking = sentence.getAnnotation("entityLinking").asInstanceOf[EntityLinking]
-      unconditional = parser.generateExpression(tokenIds, entityLinking)
+//      unconditional = parser.generateExpression(tokenIds, entityLinking)
+      unconditional = parser.parse(tokenIds, entityLinking)
       oracle <- if (laso) {
         parser.getMultiMarginScore(x.logicalForms, entityLinking, typeDeclaration)
       } else {
@@ -314,6 +315,15 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
       }
     } yield {
       PnpExample(unconditional, unconditional, Env.init, oracle)
+    }
+
+    val entityLinkings= for {
+      x <- trainingExamples
+      sentence = x.sentence
+      tokenIds = sentence.getAnnotation("tokenIds").asInstanceOf[Array[Int]]
+      entityLinking = sentence.getAnnotation("entityLinking").asInstanceOf[EntityLinking]
+    } yield {
+      entityLinking
     }
 
     println(pnpExamples.size + " training examples after oracle generation.")
@@ -334,13 +344,13 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     // evaluation. This preprocesses the corresponding table using
     // corenlp and (I think) caches the result somewhere in Sempre.
     // This will happen during the error evaluation of training anyway,
-    // but doing it up-front makes the training timers more useful. 
+    // but doing it up-front makes the training timers more useful.
     println("Preprocessing context for train/dev evaluation examples.")
     // TODO: how much does the choice of training examples affect the train error results??
     // seems to affect stanford's processing time significantly.
     trainErrorExamples.foreach(x => x.getContext)
     devExamples.foreach(x => x.getContext)
-    
+
     // Train model
     val model = parser.model
     val sgd = new SimpleSGDTrainer(model.model, 0.1f, 0.01f)
@@ -348,7 +358,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
         parser, trainErrorExamples, devExamples, devBeamSize, 2,
         typeDeclaration, new SimplificationComparator(simplifier),
         preprocessor)
-    
+
     if (laso) {
       println("Running LaSO training...")
       model.locallyNormalized = false
@@ -359,11 +369,11 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
       model.locallyNormalized = true
       val trainer = new LoglikelihoodTrainer(epochs, beamSize, true, model, sgd,
           logFunction)
-      trainer.train(pnpExamples.toList)
+      trainer.train(pnpExamples.toList, entityLinkings)
     }
     parser.dropoutProb = -1
   }
-  
+
   def getActionSpace(wellTypedTrainingLfs: Seq[Expression2], typeDeclaration: TypeDeclaration,
       combineApplications: Boolean): ActionSpace = {
     println("*** Generating action space ***")

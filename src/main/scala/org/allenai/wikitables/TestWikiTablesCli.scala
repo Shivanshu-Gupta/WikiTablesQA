@@ -224,8 +224,8 @@ object TestWikiTablesCli {
 
       // ksk added
       val states = results.executions.map(_.value.asInstanceOf[SemanticParserState])
-      val tokenEntityScores = states(0).getScoreMatrix() // The scores remain same for all states
-      printTokenEntityScores(entityLinking, e.sentence.getWords.asScala.toArray, tokenEntityScores, print)
+//      val tokenEntityScores = states(0).getScoreMatrix() // The scores remain same for all states
+//      printTokenEntityScores(entityLinking, e.sentence.getWords.asScala.toArray, tokenEntityScores, print)
 
       val beam = results.executions.slice(0, 10)
       val correctAndValue = beam.map { x =>
