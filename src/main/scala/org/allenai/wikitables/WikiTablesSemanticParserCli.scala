@@ -314,17 +314,17 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
         parser.getMultiLabelScore(x.logicalForms, entityLinking, typeDeclaration)
       }
     } yield {
-      PnpExample(unconditional, unconditional, Env.init, oracle)
+      (PnpExample(unconditional, unconditional, Env.init, oracle), x, entityLinking)
     }
 
-    val entityLinkings= for {
-      x <- trainingExamples
-      sentence = x.sentence
-      tokenIds = sentence.getAnnotation("tokenIds").asInstanceOf[Array[Int]]
-      entityLinking = sentence.getAnnotation("entityLinking").asInstanceOf[EntityLinking]
-    } yield {
-      entityLinking
-    }
+//    val entityLinkings= for {
+//      x <- trainingExamples
+//      sentence = x.sentence
+//      tokenIds = sentence.getAnnotation("tokenIds").asInstanceOf[Array[Int]]
+//      entityLinking = sentence.getAnnotation("entityLinking").asInstanceOf[EntityLinking]
+//    } yield {
+//      entityLinking
+//    }
 
     println(pnpExamples.size + " training examples after oracle generation.")
 
@@ -363,13 +363,13 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
       println("Running LaSO training...")
       model.locallyNormalized = false
       val trainer = new BsoTrainer(epochs, beamSize, 50, model, sgd, logFunction)
-      trainer.train(pnpExamples.toList)
+//      trainer.train(pnpExamples.toList)
     } else {
       println("Running loglikelihood training...")
       model.locallyNormalized = true
       val trainer = new LoglikelihoodTrainer(epochs, beamSize, true, model, sgd,
           logFunction)
-      trainer.train(pnpExamples.toList, trainingExamples, entityLinkings)
+      trainer.train(pnpExamples.map(_._1).toList, pnpExamples.map(_._2).toList, pnpExamples.map(_._3).toList)
     }
     parser.dropoutProb = -1
   }

@@ -122,7 +122,7 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
 
           Expression.logSumExp(new ExpressionVector(exLosses))
         }
-        
+
         val entityExprFiltered = entityExpr.filter(e => e != null)
         var logProbEntityExpr : Expression = null
         if(entityExprFiltered.size != 0){
