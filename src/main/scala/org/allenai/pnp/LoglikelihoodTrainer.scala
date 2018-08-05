@@ -7,6 +7,7 @@ import com.jayantkrish.jklol.ccg.lambda2.Expression2
 import com.jayantkrish.jklol.training.LogFunction
 import edu.cmu.dynet._
 import org.allenai.pnp.semparse.{EntityLinking, SemanticParserState}
+import org.allenai.wikitables.WikiTablesExample
 
 import scala.util.Random
 import scala.collection.JavaConversions._
@@ -73,14 +74,14 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
     sumExpList.toList
   }
 
-  def train[A](examples: Seq[PnpExample[A]], entityLinkings: Seq[EntityLinking] = Nil): Unit = {
+  def train[A](examples: Seq[PnpExample[A]], wikiExamples: Seq[WikiTablesExample] = Nil, entityLinkings: Seq[EntityLinking] = Nil): Unit = {
     for (i <- 0 until epochs) {
       var loss = 0.0
       var searchErrors = 0
       log.notifyIterationStart(i)
 
       log.startTimer("pp_loglikelihood")
-      for ((example, entityLinking) <- Random.shuffle(examples.zip(entityLinkings))) {
+      for ((example, wikiExample, entityLinking) <- Random.shuffle((examples, wikiExamples, entityLinkings).zipped.toList)){
         ComputationGraph.renew()
 
         val env = example.env
@@ -121,8 +122,15 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
 
           Expression.logSumExp(new ExpressionVector(exLosses))
         }
+        
+        val entityExprFiltered = entityExpr.filter(e => e != null)
+        var logProbEntityExpr : Expression = null
+        if(entityExprFiltered.size != 0){
+          logProbEntityExpr = logProbExpr + Expression.logSumExp(new ExpressionVector(entityExprFiltered))
+        } else {
+          logProbEntityExpr = logProbExpr
+        }
 
-        val logProbEntityExpr = logProbExpr + Expression.logSumExp(new ExpressionVector(entityExpr))
         val lossExpr = -1.0f * logProbEntityExpr
 
         log.stopTimer("pp_loglikelihood/build_loss")

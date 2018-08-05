@@ -369,7 +369,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
       model.locallyNormalized = true
       val trainer = new LoglikelihoodTrainer(epochs, beamSize, true, model, sgd,
           logFunction)
-      trainer.train(pnpExamples.toList, entityLinkings)
+      trainer.train(pnpExamples.toList, trainingExamples, entityLinkings)
     }
     parser.dropoutProb = -1
   }
