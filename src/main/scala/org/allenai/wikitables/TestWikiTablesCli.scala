@@ -73,7 +73,7 @@ class TestWikiTablesCli extends AbstractCli() {
     tableStringOpt = parser.accepts("tableString").withRequiredArg().ofType(classOf[String])
     numAnswersOpt = parser.accepts("numAnswers").withRequiredArg().ofType(classOf[Integer])
 
-    scoresOutputOpt = parser.accepts("scoresOutput").withRequiredArg().ofType(classOf[String])
+    scoresOutputOpt = parser.accepts("scoresOutput").withRequiredArg().ofType(classOf[String])  
   }
 
   override def run(options: OptionSet): Unit = {
@@ -215,7 +215,10 @@ object TestWikiTablesCli {
     var numCorrectAt10 = 0
     val exampleDenotations = MutableMap[String, List[(Value, Double)]]()
     
-    val sw = new PrintWriter(new File(scoresOutputFp))
+    var sw : PrintWriter = null
+    if(scoresOutputFp != ""){
+      sw = new PrintWriter(new File(scoresOutputFp))
+    } 
 
     for (e <- examples) {
       val sent = e.sentence
@@ -235,15 +238,17 @@ object TestWikiTablesCli {
       val states = results.executions.map(_.value.asInstanceOf[SemanticParserState])
 //      val tokenEntityScores = states(0).getScoreMatrix() // The scores remain same for all states
 //      printTokenEntityScores(entityLinking, e.sentence.getWords.asScala.toArray, tokenEntityScores, print)
-      sw.write(e.id + "\t" + "www.cse.iitd.ac.in/~kskeshav/wikitables/"+e.id+"\n")
-      sw.write("Question: "+sent.getWords.asScala.mkString(" ")+"\n")
+      if(sw != null){
+        sw.write(e.id + "\t" + "www.cse.iitd.ac.in/~kskeshav/wikitables/"+e.id+"\n")
+        sw.write("Question: "+sent.getWords.asScala.mkString(" ")+"\n")
+      }
       val tokenEntityScores = if(states.length > 0){
         states(0).getScoreMatrix() // The scores remain same for all states
       } else {
         None
       }
 
-      if(tokenEntityScores != None){
+      if(sw != null && tokenEntityScores != None){
         printTokenEntityScores(entityLinking, e.sentence.getWords.asScala.toArray, tokenEntityScores.asInstanceOf[Expression], sw, sent.getAnnotation("NER").asInstanceOf[List[List[String]]])
       }
 
@@ -323,7 +328,9 @@ object TestWikiTablesCli {
       printEntityTokenFeatures(entityLinking, e.sentence.getWords.asScala.toArray, print)
     }
 
-    sw.close()
+    if(sw != null){
+      sw.close()
+    }
     val loss = SemanticParserLoss(numCorrect, numCorrectAt10, examples.length)
     (loss, exampleDenotations.toMap)
   }
