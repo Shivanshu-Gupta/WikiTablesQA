@@ -98,6 +98,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
   val comparator = new SimplificationComparator(simplifier)
   val logicalFormParser = ExpressionParser.expression2()
 
+  var elRegulizerOpt : OptionSpec[Double] = null
   override def initializeOptions(parser: OptionParser): Unit = {
     randomSeedOpt = parser.accepts("randomSeed").withRequiredArg().ofType(classOf[Long]).defaultsTo(2732932987L)
     trainingDataOpt = parser.accepts("trainingData").withRequiredArg().ofType(classOf[String]).withValuesSeparatedBy(',').required()
@@ -137,6 +138,8 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     trainOnAnnotatedLfsOpt = parser.accepts("trainOnAnnotatedLfs")
     seq2TreeOpt = parser.accepts("seq2Tree")
     seq2SeqOpt = parser.accepts("seq2Seq")
+
+    elRegulizerOpt = parser.accepts("elReg").withRequiredArg().ofType(classOf[Double]).defaultsTo(0.3)
   }
 
   def initializeTrainingData(options: OptionSet, typeDeclaration: TypeDeclaration,
@@ -203,6 +206,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
 
   override def run(options: OptionSet): Unit = {
     Initialize.initialize(Map("dynet-mem" -> "4096", "random-seed" -> options.valueOf(randomSeedOpt)))
+    scala.util.Random.setSeed(options.valueOf(randomSeedOpt))
  
     val typeDeclaration = if (options.has(seq2TreeOpt)) {
       new Seq2TreeTypeDeclaration()
@@ -287,7 +291,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
     train(trainingData, devData, parser, typeDeclaration, simplifier, lfPreprocessor,
         options.valueOf(epochsOpt), options.valueOf(beamSizeOpt), options.valueOf(devBeamSizeOpt),
         options.valueOf(dropoutOpt), options.has(lasoOpt), modelOutputDir,
-        Some(options.valueOf(modelOutputOpt)))
+        Some(options.valueOf(modelOutputOpt)), options.valueOf(elRegulizerOpt))
   }
 
   /** Train the parser by maximizing the likelihood of examples.
@@ -298,7 +302,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
       simplifier: ExpressionSimplifier, preprocessor: LfPreprocessor,
       epochs: Int, beamSize: Int, devBeamSize: Int,
       dropout: Double, laso: Boolean, modelDir: Option[String],
-      bestModelOutput: Option[String]): Unit = {
+      bestModelOutput: Option[String], elRegulizer : Double): Unit = {
 
     parser.dropoutProb = dropout
     val pnpExamples = for {
@@ -369,7 +373,7 @@ class WikiTablesSemanticParserCli extends AbstractCli() {
       model.locallyNormalized = true
       val trainer = new LoglikelihoodTrainer(epochs, beamSize, true, model, sgd,
           logFunction)
-      trainer.train(pnpExamples.map(_._1).toList, pnpExamples.map(_._2).toList, pnpExamples.map(_._3).toList)
+      trainer.train(pnpExamples.map(_._1).toList, pnpExamples.map(_._2).toList, pnpExamples.map(_._3).toList, elRegulizer)
     }
     parser.dropoutProb = -1
   }
