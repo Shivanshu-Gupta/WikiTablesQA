@@ -197,6 +197,8 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
         }
 
         val lossExpr = -1.0f * logProbAugExpr
+        println(wikiExample.id)
+        println(ComputationGraph.forward(lossExpr).toVector())
 
         log.stopTimer("pp_loglikelihood/build_loss")
 
