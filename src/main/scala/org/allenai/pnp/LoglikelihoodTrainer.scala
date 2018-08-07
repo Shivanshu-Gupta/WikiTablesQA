@@ -89,19 +89,23 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
       * Find the max entity of the token and if it is not in list of entities decrease the score of (Token, Entity) pair
       */
     var decProbB : Expression = null
-    var decProb : Expression = null
+    var nullIndex = getEntityIndex("-1000", entityLinking)
+
     val entityIndicesB = getEntityIndices(entitiesB, entityLinking)
     for((entityIndices, i) <- entityIndicesB.zipWithIndex) {
       for((token, j) <- tokens.zipWithIndex){
         val tokenScores = Expression.pick(tokenEntityScoresB(i), j, 0) // Pick the scores of the jth token
         val maxEntityIndex = ComputationGraph.forward(tokenScores).toVector().zipWithIndex.maxBy(_._1)._2
-        if(! entityIndices.contains(maxEntityIndex)) {
+        var decProb : Expression = null
+        if(! entityIndices.contains(maxEntityIndex) && maxEntityIndex != nullIndex) {
            decProb = Expression.pick(tokenScores, maxEntityIndex)
         }
-        if(decProbB == null) {
-          decProbB = decProb
-        } else {
-          decProbB = decProbB + decProb
+        if(decProb != null) {
+          if(decProbB == null) {
+            decProbB = decProb
+          } else {
+            decProbB = decProbB + decProb
+          }
         }
       }
     }
