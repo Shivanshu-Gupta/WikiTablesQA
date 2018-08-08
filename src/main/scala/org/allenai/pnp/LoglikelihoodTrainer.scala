@@ -161,7 +161,7 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
         //        val indicesListBeam = getEntityIndices(entities.toList, entityLinking)
         //        val sumEntityExpr = getSumEntityExpr(tokenEntityScores.toList, indicesListBeam)
         val incExpr = increaseScore(entities.toList, tokenEntityScores.toList, entityLinking)
-        val decExpr = decreaseScore(entities.toList, tokenEntityScores.toList, entityLinking, wikiExample.sentence.getWords.toList)
+//        val decExpr = decreaseScore(entities.toList, tokenEntityScores.toList, entityLinking, wikiExample.sentence.getWords.toList)
 
         val logProbExpr = if (exLosses.length == 0) {
           Preconditions.checkState(sumMultipleExecutions,
@@ -184,21 +184,22 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
 
         //        val entityExprFiltered = entityExpr.filter(e => e != null)
         //        if(entityExprFiltered.size != 0 && i > 3){
-//         logProbEntityExpr = logProbExpr + elRegulizer * Expression.logSumExp(new ExpressionVector(entityExprFiltered))
-//      }
+        //         logProbEntityExpr = logProbExpr + elRegulizer * Expression.logSumExp(new ExpressionVector(entityExprFiltered))
+        //      }
         var logProbAugExpr = logProbExpr
         if(i > 1){
           if(incExpr != null){
             logProbAugExpr = logProbAugExpr +  elRegulizer * incExpr
           }
-          if(decExpr != null){
-            logProbAugExpr = logProbAugExpr - elRegulizer * decExpr
-          }
+//          if(decExpr != null){
+//            logProbAugExpr = logProbAugExpr - elRegulizer * decExpr
+//          }
         }
 
+//        if(ComputationGraph.forward(logProbAugExpr).toVector().get(0).isNaN()) {
+//          val issue = true
+//        }
         val lossExpr = -1.0f * logProbAugExpr
-        println(wikiExample.id)
-        println(ComputationGraph.forward(lossExpr).toVector())
 
         log.stopTimer("pp_loglikelihood/build_loss")
 

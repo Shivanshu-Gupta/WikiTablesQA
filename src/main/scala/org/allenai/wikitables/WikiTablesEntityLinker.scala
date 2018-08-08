@@ -103,11 +103,10 @@ class WikiTablesEntityLinker {
     // val unaryFormulas = matcher.getAllFormulas(FuzzyMatchFnMode.UNARY).asScala
     val binaryFormulas = matcher.getAllFormulas(FuzzyMatchFnMode.BINARY).asScala;
 //    val numberFormulas = Seq(-1, 0, 1).map(x => Formula.fromString(x.toString))
-    val numberFormulas = Seq(-1000, -1, 0, 1).map(x => Formula.fromString(x.toString))
+    val numberFormulas = Seq(-1, 0, 1).map(x => Formula.fromString(x.toString))
     
     // This gives all formulas that can be yielded by the table
-    //val unlinkedFormulas = entityFormulas ++ binaryFormulas ++ numberFormulas
-    val unlinkedFormulas = entityFormulas ++ binaryFormulas 
+    val unlinkedFormulas = entityFormulas ++ binaryFormulas ++ numberFormulas
 
     // Adding unlinked entities with a null span
     for (formula <- unlinkedFormulas) {
