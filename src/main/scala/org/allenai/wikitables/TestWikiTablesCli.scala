@@ -365,7 +365,6 @@ object TestWikiTablesCli {
     writer.write("\n")
     val tokenEntityProbScores = Expression.transpose(Expression.softmax(Expression.transpose(tokenEntityScores)))
 
-    print(nerList)
     for ((token, i) <- tokens.zipWithIndex) {
       writer.write(token+"\t")
       if(nerList(i) == Nil){

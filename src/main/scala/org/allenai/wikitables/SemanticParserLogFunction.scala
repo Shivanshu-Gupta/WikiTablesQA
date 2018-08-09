@@ -9,7 +9,7 @@ import com.jayantkrish.jklol.training.DefaultLogFunction
 import edu.cmu.dynet._
 import org.allenai.pnp.semparse.SemanticParserLoss
 
-class SemanticParserLogFunction(modelDir: Option[String], bestModel: Option[String],
+class SemanticParserLogFunction(modelDir: Option[String], bestModel: Option[String], logDir: String,
     parser: SemanticParser, trainExamples: Seq[WikiTablesExample],
     devExamples: Seq[WikiTablesExample], devBeam: Int, firstDevEpoch: Int,
     typeDeclaration: TypeDeclaration, comparator: ExpressionComparator,
@@ -30,14 +30,14 @@ class SemanticParserLogFunction(modelDir: Option[String], bestModel: Option[Stri
   /**
    * Evaluate the semantic parser's accuracy on a development set.
    */
-  private def evaluateAccuracy(examples: Seq[WikiTablesExample]): SemanticParserLoss = {
+  private def evaluateAccuracy(examples: Seq[WikiTablesExample], logFp: String = ""): SemanticParserLoss = {
     // TODO: there needs to be a better way to set the
     // train/test configuration of the parser.
     val curDropout = parser.dropoutProb
     parser.dropoutProb = -1
 
     val (loss, denotations) = TestWikiTablesCli.test(examples, parser, devBeam, false, false,
-        typeDeclaration, comparator, preprocessor, (x:Any) => (), "")
+        typeDeclaration, comparator, preprocessor, (x:Any) => (), logFp)
 
     parser.dropoutProb = curDropout
     loss
@@ -61,7 +61,13 @@ class SemanticParserLogFunction(modelDir: Option[String], bestModel: Option[Stri
 
     if (devExamples.size > 0 && iteration >= firstDevEpoch) {
       startTimer("evaluate_dev")
-      val loss = evaluateAccuracy(devExamples)
+
+      var logFp = ""
+      if(logDir != ""){
+        logFp = logDir+"/tokenScores_"+iteration+".tsv"
+      }
+
+      val loss = evaluateAccuracy(devExamples, logFp)
       logStatistic(iteration, "dev accuracy", loss.accuracy)
       logStatistic(iteration, "dev oracle @ " + devBeam + " accuracy", loss.oracleAccuracy)
       stopTimer("evaluate_dev")

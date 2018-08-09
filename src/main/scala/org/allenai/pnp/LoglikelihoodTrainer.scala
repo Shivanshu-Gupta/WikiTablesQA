@@ -56,7 +56,7 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
     foundIndex
   }
 
-  def increaseScore(entitiesB: List[ListBuffer[String]], tokenEntityScoresB: List[Expression], entityLinking: EntityLinking): Expression = {
+  def increaseScore(entitiesB: List[ListBuffer[String]], tokenEntityScoresB: List[Expression], entityLinking: EntityLinking, scoreType: String): Expression = {
     /**
       * Increase the probability of these entities
       * Check which token has best score with this entity and increase the (token, entity) probability
@@ -64,11 +64,18 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
     var incProbB : Expression = null
 
     for((entities, i) <- entitiesB.zipWithIndex) {
-      for (entity <- entities) {
 
+      var tokenEntityScores : Expression = null
+      if(scoreType == "prob"){
+        tokenEntityScores = Expression.transpose(Expression.softmax(Expression.transpose(tokenEntityScoresB(i))))
+      } else if(scoreType == "rawScore") {
+        tokenEntityScores = tokenEntityScoresB(i)
+      }
+
+      for (entity <- entities) {
         val entityIndex = getEntityIndex(entity, entityLinking)
         if(entityIndex != -1){
-          val entityScores = Expression.pick(tokenEntityScoresB(i), entityIndex, 1)
+          val entityScores = Expression.pick(tokenEntityScores, entityIndex, 1)
           val maxTokenIndex = ComputationGraph.forward(entityScores).toVector().zipWithIndex.maxBy(_._1)._2
           val incProb = Expression.pick(entityScores, maxTokenIndex)
           if(incProbB == null){
@@ -112,26 +119,35 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
     decProbB
   }
 
-  def getSumEntityExpr(tokenEntityScoresBeam: List[Expression], entityIndicesBeam: List[List[Int]]): List[Expression] = {
+  def getSumEntityExpr(tokenEntityScoresBeam: List[Expression], entityIndicesBeam: List[List[Int]], expType: String): List[Expression] = {
     var sumExpList = new ListBuffer[Expression]()
     for((tes, entityIndices) <- tokenEntityScoresBeam.zip(entityIndicesBeam)) {
-      val teps = Expression.transpose(Expression.softmax(Expression.transpose(tes))) // token entity probability scores
+      var teps : Expression = null // token entity probability scores
+      if(expType == "sum"){
+        teps = Expression.transpose(Expression.logSoftmax(Expression.transpose(tes)))
+      } else if(expType == "prod") {
+        teps = Expression.transpose(Expression.softmax(Expression.transpose(tes)))
+      }
+
       var sumExp : Expression = null
       for(index <- entityIndices) {
         val exp = Expression.sumRows(Expression.pick(teps, index, 1)) // 1 stands for the dimension
         if(sumExp == null) {
           sumExp = exp
         } else {
-          sumExp = Expression.sum(sumExp, exp)
+          sumExp = sumExp + exp
         }
       }
-      sumExpList += sumExp
+
+      if(sumExp != null){
+        sumExpList += sumExp / entityIndices.size
+      }
     }
     sumExpList.toList
   }
 
   def train[A](examples: Seq[PnpExample[A]], wikiExamples: Seq[WikiTablesExample] = Nil, entityLinkings: Seq[EntityLinking] = Nil,
-               elRegulizer: Double = 0.0): Unit = {
+               elRegulizer: Double = 0.0, scoreType: String= "rawScore"): Unit = {
     for (i <- 0 until epochs) {
       var loss = 0.0
       var searchErrors = 0
@@ -158,9 +174,9 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
 
         val expressions = states.map(_.decodeExpression)
         val entities = expressions.map(getEntities(_))
-        //        val indicesListBeam = getEntityIndices(entities.toList, entityLinking)
-        //        val sumEntityExpr = getSumEntityExpr(tokenEntityScores.toList, indicesListBeam)
-        val incExpr = increaseScore(entities.toList, tokenEntityScores.toList, entityLinking)
+        val indicesListBeam = getEntityIndices(entities.toList, entityLinking)
+        val sumEntityExpr = getSumEntityExpr(tokenEntityScores.toList, indicesListBeam, scoreType)
+//        val incExpr = increaseScore(entities.toList, tokenEntityScores.toList, entityLinking, scoreType)
 //        val decExpr = decreaseScore(entities.toList, tokenEntityScores.toList, entityLinking, wikiExample.sentence.getWords.toList)
 
         val logProbExpr = if (exLosses.length == 0) {
@@ -182,19 +198,22 @@ class LoglikelihoodTrainer(val epochs: Int, val beamSize: Int, val sumMultipleEx
           Expression.logSumExp(new ExpressionVector(exLosses))
         }
 
-        //        val entityExprFiltered = entityExpr.filter(e => e != null)
-        //        if(entityExprFiltered.size != 0 && i > 3){
-        //         logProbEntityExpr = logProbExpr + elRegulizer * Expression.logSumExp(new ExpressionVector(entityExprFiltered))
-        //      }
+        val entityExprFiltered = sumEntityExpr.filter(e => e != null)
+
         var logProbAugExpr = logProbExpr
-        if(i > 1){
-          if(incExpr != null){
-            logProbAugExpr = logProbAugExpr +  elRegulizer * incExpr
-          }
+        if(entityExprFiltered.size != 0 && i > 3){
+         logProbAugExpr = logProbAugExpr + elRegulizer * Expression.logSumExp(new ExpressionVector(entityExprFiltered))
+        }
+
+//        var logProbAugExpr = logProbExpr
+//        if(i > 1){
+//          if(incExpr != null){
+//            logProbAugExpr = logProbAugExpr +  elRegulizer * incExpr
+//          }
 //          if(decExpr != null){
 //            logProbAugExpr = logProbAugExpr - elRegulizer * decExpr
 //          }
-        }
+//        }?
 
 //        if(ComputationGraph.forward(logProbAugExpr).toVector().get(0).isNaN()) {
 //          val issue = true
