@@ -45,6 +45,7 @@ class TestWikiTablesCli extends AbstractCli() {
 
   var tsvOutputOpt: OptionSpec[String] = null
   var scoresOutputOpt: OptionSpec[String] = null
+  var writeTypeOpt: OptionSpec[String] = null
   
   var beamSizeOpt: OptionSpec[Integer] = null
   var evaluateDpdOpt: OptionSpec[Void] = null
@@ -73,7 +74,8 @@ class TestWikiTablesCli extends AbstractCli() {
     tableStringOpt = parser.accepts("tableString").withRequiredArg().ofType(classOf[String])
     numAnswersOpt = parser.accepts("numAnswers").withRequiredArg().ofType(classOf[Integer])
 
-    scoresOutputOpt = parser.accepts("scoresOutput").withRequiredArg().ofType(classOf[String])  
+    scoresOutputOpt = parser.accepts("scoresOutput").withRequiredArg().ofType(classOf[String])
+    writeTypeOpt = parser.accepts("writeType").withRequiredArg().ofType(classOf[String]).defaultsTo("human")
   }
 
   override def run(options: OptionSet): Unit = {
@@ -144,7 +146,7 @@ class TestWikiTablesCli extends AbstractCli() {
 
     val (testResults, denotations) = TestWikiTablesCli.test(testData.map(_.ex),
         parser, options.valueOf(beamSizeOpt), options.has(evaluateDpdOpt),
-        true, typeDeclaration, comparator, lfPreprocessor, println, options.valueOf(scoresOutputOpt))
+        true, typeDeclaration, comparator, lfPreprocessor, println, options.valueOf(scoresOutputOpt), options.valueOf(writeTypeOpt))
     println("*** Evaluation results ***")
     println(testResults)
 
@@ -175,7 +177,7 @@ class TestWikiTablesCli extends AbstractCli() {
     WikiTablesUtil.preprocessExample(processedExample, parser.vocab, featureGenerator, typeDeclaration)
     val (testResult, denotations) = TestWikiTablesCli.test(Seq(processedExample.ex), parser,
         options.valueOf(beamSizeOpt), options.has(evaluateDpdOpt), false, typeDeclaration, comparator,
-        lfPreprocessor, println, options.valueOf(scoresOutputOpt))
+        lfPreprocessor, println, options.valueOf(scoresOutputOpt), options.valueOf(writeTypeOpt))
     val answers = if (options.has(numAnswersOpt)) {
       denotations.map { x => x._1 -> x._2.take(options.valueOf(numAnswersOpt)) }
     } else {
@@ -208,7 +210,7 @@ object TestWikiTablesCli {
   def test(examples: Seq[WikiTablesExample], parser: SemanticParser, beamSize: Int,
       evaluateDpd: Boolean, evaluateOracle: Boolean, typeDeclaration: TypeDeclaration,
       comparator: ExpressionComparator, preprocessor: LfPreprocessor,
-      print: Any => Unit, scoresOutputFp: String): (SemanticParserLoss, Map[String, List[(Value, Double)]]) = {
+      print: Any => Unit, scoresOutputFp: String, writeType: String): (SemanticParserLoss, Map[String, List[(Value, Double)]]) = {
 
     print("")
     var numCorrect = 0
@@ -249,7 +251,14 @@ object TestWikiTablesCli {
       }
 
       if(sw != null && tokenEntityScores != None){
-        printTokenEntityScores(entityLinking, e.sentence.getWords.asScala.toArray, tokenEntityScores.asInstanceOf[Expression], sw, sent.getAnnotation("NER").asInstanceOf[List[List[String]]])
+        if(writeType == "human") {
+          printTokenEntityScores(entityLinking, e.sentence.getWords.asScala.toArray, tokenEntityScores.asInstanceOf[Expression], sw,
+            sent.getAnnotation("NER").asInstanceOf[List[List[String]]])
+        } else if(writeType == "machine") {
+          printTokenEntityScoresMachine(entityLinking, e.sentence.getWords.asScala.toArray, tokenEntityScores.asInstanceOf[Expression], sw,
+            sent.getAnnotation("NER").asInstanceOf[List[List[String]]])
+        }
+
       }
 
       val beam = results.executions.slice(0, 10)
@@ -360,6 +369,30 @@ object TestWikiTablesCli {
     }
   }
 
+  def printTokenEntityScoresMachine(entityLinking: EntityLinking, tokens: Array[String],
+                              tokenEntityScores: Expression, writer: PrintWriter, nerList: List[List[String]]): Unit = {
+
+    writer.write("\n")
+    val tokenEntityProbScores = Expression.transpose(Expression.softmax(Expression.transpose(tokenEntityScores)))
+
+    for(entity <- entityLinking.entities) {
+      writer.write(entity.expr + "\t")
+    }
+    writer.write("\n")
+
+    for ((token, i) <- tokens.zipWithIndex) {
+      writer.write(token+"\n")
+
+      val scoresToken = ComputationGraph.forward(Expression.pick(tokenEntityProbScores, i, 0)).toVector()
+      for (score <- scoresToken) {
+          writer.write(score + "\t")
+      }
+      writer.write("\n")
+    }
+    writer.write("\n")
+
+  }
+
   def printTokenEntityScores(entityLinking: EntityLinking, tokens: Array[String],
                              tokenEntityScores: Expression, writer: PrintWriter, nerList: List[List[String]]): Unit = {
     writer.write("\n")
@@ -373,14 +406,17 @@ object TestWikiTablesCli {
       else{
         writer.write(nerList(i)(0)+"\t")
       }
+
       val scoresToken = ComputationGraph.forward(Expression.pick(tokenEntityProbScores, i, 0)).toVector()
       val (sortedScores, indices) = scoresToken.zipWithIndex.sorted.unzip
       var stop = 0
       for ((score, index) <- sortedScores.zip(indices).reverse) {
+
         stop = stop + 1
         if(stop <= 2){
           writer.write(entityLinking.entities(index).expr + ":" + score + "\t")
         }
+
       }
       writer.write("\n")
     }
