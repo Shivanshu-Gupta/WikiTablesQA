@@ -205,11 +205,14 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
 
       (t, entityScoreMatrix)
     }
-    val knowledgeGraphEmbedding = embedKnowledgeGraph(entityLinking.graph, entityLinking.entities,
-                                                      tokenIdToEmbedding)
-    if (knowledgeGraphEmbedding.isEmpty) {
-      println("WARNING: Knowledge graph embedding is empty!")
-    }
+//    val knowledgeGraphEmbedding = embedKnowledgeGraph(entityLinking.graph, entityLinking.entities,
+//                                                      tokenIdToEmbedding)
+//    if (knowledgeGraphEmbedding.isEmpty) {
+//      println("WARNING: Knowledge graph embedding is empty!")
+//    }
+
+    val knowledgeGraphEmbedding : Map[Entity, Expression] = null
+
     val entityEmbeddingMatrices = for {
       t <- entityLinking.entityTypes
     } yield {

@@ -218,7 +218,7 @@ object TestWikiTablesCli {
     val exampleDenotations = MutableMap[String, List[(Value, Double)]]()
     
     var sw : PrintWriter = null
-    if(scoresOutputFp != ""){
+    if(scoresOutputFp != null){
       sw = new PrintWriter(new File(scoresOutputFp))
     } 
 
